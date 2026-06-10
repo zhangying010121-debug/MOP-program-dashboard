@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>导入诊断测试</title>
+<style>
+  body { font-family: system-ui, sans-serif; padding: 40px; background: #f5f5f5; }
+  .box { background: white; border-radius: 12px; padding: 30px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+  h2 { margin-top: 0; }
+  .btn { display: inline-block; padding: 12px 24px; background: #2563eb; color: white; border-radius: 8px; cursor: pointer; font-size: 15px; }
+  .btn:hover { background: #1d4ed8; }
+  .log { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin-top: 16px; font-family: monospace; font-size: 13px; white-space: pre-wrap; min-height: 100px; max-height: 400px; overflow-y: auto; }
+  .ok { color: #16a34a; }
+  .err { color: #dc2626; }
+  .info { color: #2563eb; }
+  input[type="file"] { display: none; }
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+
+<div class="box">
+  <h2>1. 环境检测</h2>
+  <div id="envLog" class="log"></div>
+</div>
+
+<div class="box">
+  <h2>2. 门店业绩文件测试</h2>
+  <label class="btn" onclick="document.getElementById('storeFile').click()">选择门店Excel文件</label>
+  <input type="file" id="storeFile" accept=".xlsx,.xls,.csv" onchange="testStoreFile(this)">
+  <div id="storeLog" class="log"></div>
+</div>
+
+<div class="box">
+  <h2>3. 导购业绩文件测试</h2>
+  <label class="btn" onclick="document.getElementById('guideFile').click()">选择导购Excel文件</label>
+  <input type="file" id="guideFile" accept=".xlsx,.xls,.csv" onchange="testGuideFile(this)">
+  <div id="guideLog" class="log"></div>
+</div>
+
+<script>
+function log(id, msg, type='info') {
+  const el = document.getElementById(id);
+  const cls = type === 'ok' ? 'ok' : type === 'err' ? 'err' : 'info';
+  el.innerHTML += '<div class="' + cls + '">' + new Date().toLocaleTimeString() + ' ' + msg + '</div>';
+}
+
+// 环境检测
+const env = document.getElementById('envLog');
+log('envLog', '浏览器: ' + navigator.userAgent.substring(0, 60), 'info');
+log('envLog', 'XLSX库: ' + (typeof XLSX !== 'undefined' ? '已加载 ✅' : '未加载 ❌'), typeof XLSX !== 'undefined' ? 'ok' : 'err');
+log('envLog', 'FileReader: ' + (typeof FileReader !== 'undefined' ? '已加载 ✅' : '未加载 ❌'), typeof FileReader !== 'undefined' ? 'ok' : 'err');
+log('envLog', '请点击上方按钮选择文件进行测试', 'info');
+
+function testStoreFile(input) {
+  const file = input.files[0];
+  if (!file) { log('storeLog', '未选择文件', 'err'); return; }
+  log('storeLog', '选中文件: ' + file.name + ' (' + file.size + ' 字节)', 'ok');
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    log('storeLog', 'FileReader onload 触发 ✅', 'ok');
+    try {
+      const data = new Uint8Array(e.target.result);
+      log('storeLog', '数据长度: ' + data.length + ' 字节', 'info');
+      const wb = XLSX.read(data, { type: 'array' });
+      log('storeLog', 'XLSX.read 成功 ✅ Sheet: ' + wb.SheetNames.join(', '), 'ok');
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const json = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+      log('storeLog', '共 ' + json.length + ' 行', 'ok');
+      for (let i = 0; i < Math.min(3, json.length); i++) {
+        log('storeLog', '  行' + i + ': ' + JSON.stringify(json[i]).substring(0, 200), 'info');
+      }
+    } catch(err) {
+      log('storeLog', '解析错误 ❌ ' + err.message, 'err');
+    }
+  };
+  reader.onerror = function() {
+    log('storeLog', 'FileReader 错误 ❌', 'err');
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function testGuideFile(input) {
+  const file = input.files[0];
+  if (!file) { log('guideLog', '未选择文件', 'err'); return; }
+  log('guideLog', '选中文件: ' + file.name + ' (' + file.size + ' 字节)', 'ok');
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    log('guideLog', 'FileReader onload 触发 ✅', 'ok');
+    try {
+      const data = new Uint8Array(e.target.result);
+      log('guideLog', '数据长度: ' + data.length + ' 字节', 'info');
+      const wb = XLSX.read(data, { type: 'array' });
+      log('guideLog', 'XLSX.read 成功 ✅ Sheet: ' + wb.SheetNames.join(', '), 'ok');
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const json = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
+      log('guideLog', '共 ' + json.length + ' 行', 'ok');
+      for (let i = 0; i < Math.min(5, json.length); i++) {
+        log('guideLog', '  行' + i + ': ' + JSON.stringify(json[i]).substring(0, 200), 'info');
+      }
+    } catch(err) {
+      log('guideLog', '解析错误 ❌ ' + err.message, 'err');
+    }
+  };
+  reader.onerror = function() {
+    log('guideLog', 'FileReader 错误 ❌', 'err');
+  };
+  reader.readAsArrayBuffer(file);
+}
+</script>
+
+</body>
+</html>

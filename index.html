@@ -1,0 +1,2407 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>小程序月度业绩达成看板</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<style>
+/* ===== 修改1：浅色白色系主题 ===== */
+:root {
+  --bg: #f0f2f5;
+  --card-bg: #ffffff;
+  --border: #e4e8ef;
+  --text: #1a1f2e;
+  --text-muted: #6b7280;
+  --blue: #1e40af;
+  --blue-light: #3b82f6;
+  --green: #16a34a;
+  --red: #dc2626;
+  --orange: #d97706;
+  --accent: #e36209;
+  --header-bg: #1e3a5f;
+  --shadow: 0 1px 4px rgba(0,0,0,.08), 0 2px 12px rgba(0,0,0,.04);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif; min-height: 100vh; }
+
+/* ===== TOP HEADER（浅色改造）===== */
+.top-bar {
+  background: #ffffff;
+  border-bottom: 1px solid var(--border);
+  padding: 14px 24px;
+  display: flex; align-items: center; justify-content: space-between;
+  box-shadow: 0 1px 6px rgba(0,0,0,.06);
+}
+.top-bar h1 { font-size: 20px; font-weight: 700; color: var(--header-bg); letter-spacing: 1px; }
+.top-bar h1 span { color: #e36209; }
+.top-bar .time-badge {
+  background: #eff6ff; border: 1px solid #bfdbfe;
+  border-radius: 20px; padding: 6px 16px; font-size: 13px; color: var(--blue);
+  font-weight: 500;
+}
+
+/* ===== MAIN LAYOUT ===== */
+.container { max-width: 1440px; margin: 0 auto; padding: 20px 24px; }
+.section-title {
+  font-size: 14px; font-weight: 700; color: var(--text);
+  letter-spacing: 0.5px;
+  margin-bottom: 12px; padding-left: 10px;
+  display: flex; align-items: center; gap: 8px;
+  border-left: 3px solid var(--blue);
+  justify-content: space-between;
+}
+
+/* ===== 截图复制按钮 ===== */
+.capture-panel { /* 无可见样式，纯逻辑包裹 */ }
+.capture-btn {
+  background: #f5f5f5; border: none; color: #555;
+  border-radius: 4px; padding: 4px 10px; font-size: 12px;
+  cursor: pointer; transition: background .2s;
+  position: relative; flex-shrink: 0;
+  white-space: nowrap;
+}
+.capture-btn:hover { background: #e8e8e8; }
+.capture-btn::after {
+  content: '点击复制图片'; position: absolute; bottom: calc(100% + 4px); left: 50%;
+  transform: translateX(-50%); background: #333; color: #fff;
+  font-size: 11px; padding: 4px 8px; border-radius: 4px;
+  white-space: nowrap; opacity: 0; pointer-events: none;
+  transition: opacity .2s; z-index: 10;
+}
+.capture-btn:hover::after { opacity: 1; }
+.capture-btn.success { color: var(--green); background: #f0fdf4; }
+.capture-btn.error { color: var(--red); background: #fff1f2; }
+.capture-btn.success::after, .capture-btn.error::after { display: none; }
+
+/* ===== KPI CARDS ===== */
+.kpi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 20px; }
+.kpi-card {
+  background: var(--card-bg); border: 1px solid var(--border);
+  border-radius: 12px; padding: 20px 22px;
+  box-shadow: var(--shadow);
+  transition: border-color .2s, box-shadow .2s;
+}
+.kpi-card:hover { border-color: var(--blue-light); box-shadow: 0 4px 16px rgba(59,130,246,.12); }
+.kpi-card .label { font-size: 12px; color: var(--text-muted); margin-bottom: 8px; }
+.kpi-card .value { font-size: 30px; font-weight: 700; color: var(--text); }
+.kpi-card .sub { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+.kpi-card .tag {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px;
+  margin-top: 6px;
+}
+.tag.ahead { background: #dcfce7; color: var(--green); }
+.tag.behind { background: #fee2e2; color: var(--red); }
+.tag.normal { background: #fef3c7; color: var(--orange); }
+
+/* KPI 环比行 */
+.kpi-mom { font-size: 13px; margin-top: 6px; font-weight: 500; line-height: 1.4; }
+
+/* 表格列高亮样式 */
+.th-highlight-blue { border-left: 3px solid #3b82f6 !important; }
+.th-highlight-green { border-left: 3px solid #16a34a !important; }
+.th-highlight-orange { border-left: 3px solid #d97706 !important; }
+.td-highlight-target { background: #e6f7ff !important; font-weight: 700; }
+.td-highlight-achieved { background: #f6ffed !important; font-weight: 700; color: #1a1f2e; }
+.th-store-name { min-width: 180px; }
+.td-store-name { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ===== PROGRESS BARS ===== */
+.progress-section { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 20px 22px; margin-bottom: 20px; box-shadow: var(--shadow); }
+.progress-row { display: flex; align-items: center; gap: 16px; margin-bottom: 12px; }
+.progress-row:last-child { margin-bottom: 0; }
+.progress-label { width: 90px; font-size: 13px; color: var(--text-muted); flex-shrink: 0; }
+.progress-bar-wrap { flex: 1; height: 18px; background: #f1f5f9; border-radius: 9px; overflow: hidden; position: relative; }
+.progress-bar { height: 100%; border-radius: 9px; transition: width 1s ease; position: relative; }
+.pb-time { background: linear-gradient(90deg, #93c5fd, #60a5fa); }
+.pb-achieve { background: linear-gradient(90deg, #34d399, #16a34a); }
+.pb-achieve.behind { background: linear-gradient(90deg, #f87171, #dc2626); }
+.pb-achieve.warning { background: linear-gradient(90deg, #fcd34d, #d97706); }
+.progress-val { width: 55px; text-align: right; font-size: 13px; font-weight: 600; flex-shrink: 0; }
+.time-marker {
+  position: absolute; top: 0; width: 2px; height: 100%;
+  background: rgba(30,64,175,0.4); pointer-events: none;
+}
+
+/* ===== FULL WIDTH CHART ===== */
+.chart-full { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; margin-bottom: 20px; box-shadow: var(--shadow); }
+.chart-full .chart-box { height: 280px; }
+
+/* ===== PK SECTION（三列横排布局）===== */
+.pk-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 20px; }
+.pk-card {
+  background: var(--card-bg); border: 1px solid var(--border);
+  border-radius: 14px; padding: 16px 18px;
+  box-shadow: var(--shadow);
+  display: flex; flex-direction: column;
+}
+.pk-card-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 12px;
+}
+.pk-group-label {
+  font-size: 13px; font-weight: 700; color: var(--text-muted);
+  background: #f1f5f9; padding: 3px 10px; border-radius: 6px;
+}
+.pk-prize {
+  font-size: 13px; font-weight: 700;
+  background: #fef3c7; color: #92400e;
+  padding: 4px 12px; border-radius: 20px;
+  border: 1px solid #fde68a;
+}
+.pk-battle {
+  display: grid; grid-template-columns: 1fr auto 1fr;
+  gap: 8px; align-items: start;
+}
+/* 单个区域块（精简版） */
+.pk-region-block {
+  background: #f8fafc; border: 1px solid var(--border);
+  border-radius: 10px; padding: 10px 12px;
+  position: relative; /* 浮动徽章定位锚点 */
+}
+.pk-region-block.winner {
+  background: #f0fdf4; border-color: #86efac;
+}
+.pk-region-block.loser {
+  background: #fff7f7; border-color: #fca5a5;
+}
+/* 区域名+区经 合并一行 */
+.pk-region-name { font-size: 15px; font-weight: 700; color: var(--text); display: inline; }
+.pk-region-mgr { font-size: 11px; color: var(--text-muted); display: inline; margin-left: 4px; }
+/* 目标→达成 合并一行 */
+.pk-target-line { font-size: 11px; color: var(--text-muted); margin: 4px 0; }
+.pk-target-line .pk-val { font-weight: 700; color: var(--text); }
+/* 达成率 单独大字行 */
+.pk-rate-big {
+  font-size: 22px; font-weight: 800; margin: 4px 0 6px;
+  line-height: 1;
+}
+.pk-rate-big.rate-green { color: var(--green); }
+.pk-rate-big.rate-orange { color: var(--orange); }
+.pk-rate-big.rate-red { color: var(--red); }
+/* 进度条 6px */
+.pk-rate-row { margin-bottom: 0; }
+.pk-bar-outer { height: 6px; background: #e9ecef; border-radius: 3px; overflow: hidden; }
+.pk-bar-inner { height: 100%; border-radius: 3px; transition: width 0.8s ease; }
+/* 浮动获胜徽章（右上角） */
+.pk-winner-float {
+  position: absolute; top: 6px; right: 6px;
+  font-size: 10px; font-weight: 700;
+  padding: 2px 6px; border-radius: 6px;
+  line-height: 1.3; z-index: 2;
+}
+.pk-winner-float.win { background: #dcfce7; color: var(--green); border: 1px solid #86efac; }
+.pk-winner-float.not-yet { background: #f1f5f9; color: #94a3b8; border: 1px solid #d1d5db; }
+
+/* VS 中间列（小标签样式） */
+.pk-vs-col {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 4px; padding: 4px 0;
+}
+.vs-badge {
+  font-size: 11px; font-weight: 800; color: #94a3b8;
+  background: #f1f5f9; border-radius: 10px;
+  padding: 2px 8px; display: inline-block;
+  border: 1px solid #e2e8f0;
+}
+/* 冲刺目标区（精简版：灰色分隔行，2行布局） */
+.sprint-section {
+  margin-top: 10px; padding-top: 8px;
+  border-top: 1px solid #e9ecef;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+}
+.sprint-block {
+  padding: 4px 6px;
+}
+.sprint-title { font-size: 11px; font-weight: 600; color: var(--text-muted); margin-bottom: 4px; display: flex; align-items: center; gap: 4px; }
+.sprint-bar-outer { height: 5px; background: #f1f5f9; border-radius: 3px; overflow: hidden; }
+.sprint-bar-inner { height: 100%; border-radius: 3px; background: linear-gradient(90deg, #94a3b8, #64748b); transition: width 0.8s ease; }
+.sprint-bar-inner.sprint-achieved { background: linear-gradient(90deg, #34d399, #16a34a); }
+.sprint-bar-label { font-size: 10px; color: var(--text-muted); display: flex; justify-content: space-between; align-items: center; margin-top: 2px; }
+.sprint-prize { font-size: 10px; color: #94a3b8; font-weight: 600; display: inline-flex; align-items: center; gap: 2px; }
+.sprint-prize.achieved { color: var(--green); }
+
+/* ===== TABLE ===== */
+.table-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; margin-bottom: 20px; box-shadow: var(--shadow); overflow-x: auto; }
+.table-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+.table-toolbar h3 { font-size: 14px; font-weight: 700; color: var(--text); }
+.search-input {
+  background: #f8fafc; border: 1px solid var(--border); color: var(--text);
+  border-radius: 6px; padding: 6px 12px; font-size: 13px; width: 200px;
+}
+.search-input:focus { outline: none; border-color: var(--blue-light); background: #fff; }
+.filter-select {
+  background: #f8fafc; border: 1px solid var(--border); color: var(--text);
+  border-radius: 6px; padding: 6px 12px; font-size: 13px; cursor: pointer;
+}
+.filter-select:focus { outline: none; border-color: var(--blue-light); }
+.btn {
+  background: #eff6ff; border: 1px solid #bfdbfe;
+  color: var(--blue); border-radius: 6px; padding: 6px 14px;
+  font-size: 13px; cursor: pointer; transition: background .2s;
+}
+.btn:hover { background: #dbeafe; }
+.btn-danger { background: #fff1f2; border-color: #fecaca; color: var(--red); }
+.btn-danger:hover { background: #fee2e2; }
+.btn-green { background: #f0fdf4; border-color: #bbf7d0; color: var(--green); }
+.btn-green:hover { background: #dcfce7; }
+
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { background: #f8fafc; color: var(--text-muted); font-weight: 600; padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); cursor: pointer; white-space: nowrap; user-select: none; }
+th:hover { color: var(--text); background: #f1f5f9; }
+th .sort-icon { margin-left: 4px; opacity: 0.4; }
+th.sorted .sort-icon { opacity: 1; color: var(--blue); }
+td { padding: 9px 12px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+tr:hover td { background: #f8fafc; }
+tr:last-child td { border-bottom: none; }
+
+.badge {
+  display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600;
+}
+.badge-green { background: #dcfce7; color: var(--green); }
+.badge-red { background: #fee2e2; color: var(--red); }
+.badge-orange { background: #fef3c7; color: var(--orange); }
+
+.rate-cell { font-weight: 700; }
+.rate-green { color: var(--green); }
+.rate-red { color: var(--red); }
+.rate-orange { color: var(--orange); }
+
+/* ===== 环比增幅样式 ===== */
+.mom-up { color: var(--green); font-weight: 600; white-space: nowrap; }
+.mom-down { color: var(--red); font-weight: 600; white-space: nowrap; }
+.mom-na { color: var(--text-muted); white-space: nowrap; }
+
+/* ===== 修改4/5：表格内进度条（宽版）===== */
+.table-rate-cell { min-width: 110px; }
+.table-bar-wrap {
+  width: 100%; height: 22px;
+  background: #f1f5f9; border-radius: 4px;
+  overflow: hidden; position: relative;
+}
+.table-bar-fill {
+  height: 100%; border-radius: 4px;
+  transition: width 0.8s ease;
+  position: absolute; top: 0; left: 0;
+}
+.table-bar-text {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700; color: #fff;
+  text-shadow: 0 1px 2px rgba(0,0,0,.3);
+  z-index: 1;
+}
+.table-bar-text.dark-txt { color: #374151; text-shadow: none; }
+
+/* mini progress in table（小条形） */
+.mini-bar-wrap { width: 60px; height: 6px; background: #e9ecef; border-radius: 3px; display: inline-block; vertical-align: middle; margin-right: 4px; }
+.mini-bar { height: 100%; border-radius: 3px; }
+
+/* ===== DATA INPUT PANEL ===== */
+.data-panel { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 20px 22px; margin-bottom: 20px; box-shadow: var(--shadow); }
+.data-panel summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--blue); display: flex; align-items: center; gap: 8px; }
+.data-panel summary::marker { display: none; }
+.data-panel summary::-webkit-details-marker { display: none; }
+.data-panel[open] summary::after { content: ' ▲'; font-size: 10px; }
+.data-panel:not([open]) summary::after { content: ' ▼'; font-size: 10px; }
+.upload-zone {
+  border: 2px dashed var(--border); border-radius: 8px;
+  padding: 30px; text-align: center; margin-top: 16px;
+  cursor: pointer; transition: border-color .2s, background .2s;
+}
+.upload-zone:hover, .upload-zone.drag-over { border-color: var(--blue-light); background: #eff6ff; }
+.upload-zone p { color: var(--text-muted); font-size: 13px; margin-top: 8px; }
+.upload-icon { font-size: 32px; }
+.paste-area {
+  width: 100%; background: #f8fafc; border: 1px solid var(--border);
+  color: var(--text); border-radius: 6px; padding: 10px;
+  font-family: monospace; font-size: 12px; resize: vertical;
+  min-height: 120px; margin-top: 12px;
+}
+.paste-area:focus { outline: none; border-color: var(--blue-light); background: #fff; }
+.data-format-hint { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 14px 16px; margin-top: 14px; }
+.data-format-hint p { font-size: 12px; color: var(--text-muted); line-height: 1.6; }
+.data-format-hint code { color: var(--blue); font-size: 11px; background: #dbeafe; padding: 1px 5px; border-radius: 3px; }
+
+/* ===== PAGINATION ===== */
+.pagination { display: flex; align-items: center; gap: 8px; margin-top: 14px; justify-content: flex-end; }
+.page-btn { background: #fff; border: 1px solid var(--border); color: var(--text-muted); border-radius: 4px; padding: 4px 10px; font-size: 12px; cursor: pointer; }
+.page-btn:hover, .page-btn.active { border-color: var(--blue-light); color: var(--blue); background: #eff6ff; }
+.page-info { font-size: 12px; color: var(--text-muted); }
+
+/* ===== TABS ===== */
+.tabs { display: flex; gap: 4px; background: #f1f5f9; border-radius: 8px; padding: 4px; margin-bottom: 16px; width: fit-content; }
+.tab-btn { padding: 6px 18px; border-radius: 6px; font-size: 13px; cursor: pointer; border: none; background: transparent; color: var(--text-muted); transition: all .2s; }
+.tab-btn.active { background: var(--blue); color: white; font-weight: 600; }
+
+/* ===== TOAST ===== */
+#toast {
+  position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(80px);
+  background: var(--blue); color: white; padding: 10px 24px; border-radius: 20px;
+  font-size: 13px; font-weight: 500; z-index: 9999; transition: transform .3s;
+  pointer-events: none; box-shadow: 0 4px 16px rgba(0,0,0,.15);
+}
+#toast.show { transform: translateX(-50%) translateY(0); }
+
+/* ===== MODAL ===== */
+.modal-overlay {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,.4);
+  z-index: 1000; align-items: center; justify-content: center;
+}
+.modal-overlay.open { display: flex; }
+.modal-box { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 24px; max-width: 500px; width: 90%; max-height: 80vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,.2); }
+.modal-box h3 { margin-bottom: 16px; color: var(--text); }
+.modal-close { float: right; background: none; border: none; color: var(--text-muted); font-size: 20px; cursor: pointer; }
+
+/* ===== RESPONSIVE ===== */
+@media (max-width: 1200px) {
+  .pk-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 900px) {
+  .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+  .pk-grid { grid-template-columns: 1fr; }
+  .pk-battle { grid-template-columns: 1fr; gap: 8px; }
+  .pk-vs-col { flex-direction: row; padding: 0; }
+  .sprint-section { grid-template-columns: 1fr; }
+}
+@media (max-width: 600px) {
+  .kpi-grid { grid-template-columns: 1fr; }
+  .top-bar h1 { font-size: 16px; }
+}
+
+/* number counter animation */
+@keyframes countUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.animated { animation: countUp .5s ease; }
+
+/* 滚动条美化 */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--blue-light); }
+
+/* ===== 导购业绩模块 ===== */
+/* 对账折叠面板 */
+.audit-panel {
+  background: var(--card-bg); border: 1px solid var(--border);
+  border-radius: 12px; padding: 0; margin-bottom: 16px;
+  box-shadow: var(--shadow); overflow: hidden;
+}
+.audit-panel summary {
+  cursor: pointer; padding: 14px 20px;
+  font-size: 14px; font-weight: 600; color: var(--text);
+  display: flex; align-items: center; justify-content: space-between;
+  list-style: none; user-select: none;
+}
+.audit-panel summary::-webkit-details-marker { display: none; }
+.audit-panel summary .audit-summary-left { display: flex; align-items: center; gap: 10px; }
+.audit-panel summary .audit-kpis { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+.audit-kpi-item { font-size: 13px; display: flex; align-items: center; gap: 5px; }
+.audit-kpi-item .ak-label { color: var(--text-muted); }
+.audit-kpi-item .ak-val { font-weight: 700; }
+.audit-kpi-item .ak-val.ok { color: var(--green); }
+.audit-kpi-item .ak-val.warn { color: var(--red); }
+.audit-panel-body { padding: 0 20px 16px; }
+.audit-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+.audit-table th { background: #f8fafc; color: var(--text-muted); font-weight: 600; padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.audit-table td { padding: 8px 12px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+.audit-table tr:last-child td { border-bottom: none; }
+.audit-table tr.has-diff td { background: #fff7ed; }
+.audit-diff-pos { color: var(--red); font-weight: 700; }
+.audit-diff-neg { color: var(--green); font-weight: 700; }
+.audit-diff-zero { color: var(--text-muted); }
+
+/* 导购数据类型选择 */
+.data-type-toggle {
+  display: flex; gap: 0; margin-bottom: 14px;
+  background: #f1f5f9; border-radius: 8px; padding: 3px; width: fit-content;
+}
+.data-type-btn {
+  padding: 6px 16px; border-radius: 6px; font-size: 13px; cursor: pointer;
+  border: none; background: transparent; color: var(--text-muted); transition: all .2s;
+}
+.data-type-btn.active { background: var(--blue); color: white; font-weight: 600; }
+
+/* 导购板块容器 */
+.guide-section {
+  background: var(--card-bg); border: 1px solid var(--border);
+  border-radius: 12px; padding: 18px 20px; margin-bottom: 20px;
+  box-shadow: var(--shadow); overflow-x: auto;
+}
+/* 筛选栏 */
+.guide-toolbar {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap;
+}
+/* 门店分组行 */
+.guide-store-row {
+  background: #f1f5f9; cursor: pointer;
+  transition: background .15s;
+  user-select: none;
+}
+.guide-store-row:hover { background: #e2e8f0; }
+.guide-store-row td {
+  padding: 10px 12px; font-weight: 700; font-size: 13px;
+  color: var(--text); border-bottom: 1px solid var(--border);
+}
+.guide-store-toggle { margin-right: 6px; font-size: 11px; color: var(--text-muted); transition: transform .2s; display: inline-block; }
+.guide-store-toggle.open { transform: rotate(90deg); }
+/* 导购明细行 */
+.guide-detail-row td { padding: 8px 12px 8px 24px; border-bottom: 1px solid #f1f5f9; font-size: 13px; }
+.guide-detail-row:last-child td { border-bottom: none; }
+.guide-detail-row:hover td { background: #f8fafc; }
+/* 无归属导购行 */
+.guide-no-attr-row td { background: #fffbe6 !important; }
+.guide-no-attr-row:hover td { background: #fff7cc !important; }
+/* 金额样式 */
+.guide-amount-pos { text-align: right; font-weight: 600; color: var(--text); }
+.guide-amount-neg { text-align: right; font-weight: 600; color: var(--red); }
+.guide-amount-zero { text-align: right; color: var(--text-muted); }
+/* 占比条 */
+.guide-ratio-wrap { display: flex; align-items: center; gap: 6px; min-width: 80px; }
+.guide-ratio-bar { height: 6px; background: #e2e8f0; border-radius: 3px; width: 50px; display: inline-block; overflow: hidden; }
+.guide-ratio-fill { height: 100%; border-radius: 3px; background: var(--blue-light); }
+.guide-ratio-text { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+/* 排名徽章 */
+.guide-rank { width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; background: #f1f5f9; color: var(--text-muted); }
+.guide-rank.r1 { background: #fef3c7; color: #92400e; }
+.guide-rank.r2 { background: #f1f5f9; color: #374151; }
+.guide-rank.r3 { background: #fde8d8; color: #92400e; }
+/* 无数据提示 */
+.guide-empty { text-align: center; padding: 40px; color: var(--text-muted); font-size: 14px; }
+</style>
+</head>
+<body>
+
+<!-- 调试面板（8秒后自动隐藏，点击可关闭）-->
+<div id="debugBanner" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:#f0fdf4;border-bottom:2px solid #86efac;padding:8px 16px;font-family:monospace;max-height:40vh;overflow-y:auto;cursor:pointer;" onclick="this.style.display='none'">
+  <div style="font-size:13px;font-weight:700;margin-bottom:4px;">🔧 调试日志（点击关闭）</div>
+</div>
+<div class="top-bar">
+  <h1>🏪 小程序月度业绩 <span>达成看板</span> <small style="font-size:11px;color:#999;font-weight:400;margin-left:6px;">v2.1-fix3</small></h1>
+  <div id="topTimeBadge" class="time-badge">加载中...</div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<!-- MAIN -->
+<div class="container">
+
+  <!-- ① DATA INPUT PANEL -->
+  <details class="data-panel" id="dataPanel">
+    <summary>📥 数据导入 / 更新（点击展开）</summary>
+    <div style="margin-top:16px;">
+
+      <!-- 数据类型选择 -->
+      <div class="data-type-toggle" id="dataTypeToggle">
+        <button class="data-type-btn active" onclick="switchDataType('store',this)">🏪 门店业绩数据</button>
+        <button class="data-type-btn" onclick="switchDataType('guide',this)">👤 导购个人业绩</button>
+      </div>
+
+      <!-- 门店数据区 -->
+      <div id="dataAreaStore">
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+          <div class="tabs" style="margin-bottom:0">
+            <button class="tab-btn active" onclick="switchInputTab('upload',this)">上传Excel文件</button>
+            <button class="tab-btn" onclick="switchInputTab('paste',this)">粘贴数据</button>
+          </div>
+        </div>
+        <!-- Upload Tab -->
+        <div id="tabUpload">
+          <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
+            <div class="upload-icon">📂</div>
+            <p><strong>点击选择 或 拖拽Excel文件到此处</strong></p>
+            <p>支持 .xlsx / .xls / .csv 格式 | 从你的每日更新文件导入"门店业绩"工作表</p>
+            <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleFileUpload(event)">
+          </div>
+        </div>
+        <!-- Paste Tab -->
+        <div id="tabPaste" style="display:none">
+          <textarea class="paste-area" id="pasteArea" placeholder="从Excel复制数据后粘贴到这里（包含表头行）&#10;格式示例：&#10;门店编号	门店名称	正价/奥莱	区经	6月目标	6月达成	实收金额	售后金额"></textarea>
+          <button class="btn" style="margin-top:8px" onclick="parsePasteData()">解析并导入</button>
+        </div>
+        <div class="data-format-hint" style="margin-top:14px;">
+          <p>📌 <strong>数据格式说明：</strong>复制"门店业绩"工作表中表头+所有门店数据行（跳过合计行），必须包含以下列：
+            <code>门店编号</code> <code>门店名称</code> <code>正价/奥莱</code> <code>区经</code> <code>6月目标</code> <code>6月达成</code>
+            可选列（有则自动读取）：<code>实收金额</code> <code>售后金额</code>
+          </p>
+          <p style="margin-top:6px;">💡 每次上传最新数据文件即可自动覆盖更新。</p>
+        </div>
+        <div style="margin-top:12px;display:flex;gap:8px;">
+          <button class="btn btn-green" onclick="loadSampleData()">📊 载入示例数据（首次体验）</button>
+          <button class="btn btn-danger" onclick="confirmClearData()">🗑 清空所有数据</button>
+        </div>
+      </div>
+
+      <!-- 导购数据区 -->
+      <div id="dataAreaGuide" style="display:none">
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+          <div class="tabs" style="margin-bottom:0">
+            <button class="tab-btn active" onclick="switchInputTab('guideUpload',this)">上传Excel文件</button>
+            <button class="tab-btn" onclick="switchInputTab('guidePaste',this)">粘贴数据</button>
+          </div>
+        </div>
+        <!-- Guide Upload Tab -->
+        <div id="tabGuideUpload">
+          <div class="upload-zone" id="guideUploadZone" onclick="document.getElementById('guideFileInput').click()">
+            <div class="upload-icon">👤</div>
+            <p><strong>点击选择 或 拖拽导购业绩Excel文件到此处</strong></p>
+            <p>支持数据透视表格式 | 列：导购门店编号 / 导购名称 / 求和项:实收金额</p>
+            <input type="file" id="guideFileInput" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleGuideFileUpload(event)">
+          </div>
+        </div>
+        <!-- Guide Paste Tab -->
+        <div id="tabGuidePaste" style="display:none">
+          <textarea class="paste-area" id="guidePasteArea" placeholder="粘贴导购业绩透视表数据（包含表头行）&#10;格式：导购门店编号	导购名称	求和项:实收金额"></textarea>
+          <button class="btn" style="margin-top:8px" onclick="parseGuidePasteData()">解析并导入</button>
+        </div>
+        <div class="data-format-hint" style="margin-top:14px;">
+          <p>📌 <strong>导购数据格式：</strong>数据透视表结构 — 门店编号行（第2列有值，以95开头，第3列为空）后跟该门店所有导购行（第3列=导购姓名，第4列=实收金额）。</p>
+          <p style="margin-top:6px;">💡 请先导入门店业绩数据，再导入导购数据，系统将自动关联对账。</p>
+        </div>
+        <div style="margin-top:12px;display:flex;gap:8px;">
+          <button class="btn btn-danger" onclick="clearGuideData()">🗑 清空导购数据</button>
+        </div>
+      </div>
+
+    </div>
+  </details>
+
+  <!-- ② KPI OVERVIEW -->
+  <div class="capture-panel" id="panelKpi">
+  <div class="section-title"><span>核心指标概览</span><button class="capture-btn" onclick="capturePanel('panelKpi')">📷 生成图片</button></div>
+  <div class="kpi-grid">
+    <!-- 第1行：金额类指标 -->
+    <div class="kpi-card">
+      <div class="label">月度总目标</div>
+      <div class="value" id="kpiTarget">—</div>
+      <div class="sub" id="kpiStoreCount">—</div>
+      <div id="kpiTargetMom"></div>
+    </div>
+    <div class="kpi-card">
+      <div class="label">当前累计达成</div>
+      <div class="value" id="kpiAchieved">—</div>
+      <div class="sub" id="kpiAchievedSub">—</div>
+      <div id="kpiAchievedMom"></div>
+    </div>
+    <div class="kpi-card">
+      <div class="label">较目标差额</div>
+      <div class="value" id="kpiGapValue">—</div>
+      <div class="sub" id="kpiGapSub">—</div>
+    </div>
+    <!-- 第2行：进度类指标 -->
+    <div class="kpi-card">
+      <div class="label">整体达成率</div>
+      <div class="value" id="kpiRate">—</div>
+      <div id="kpiRateTag"></div>
+      <div id="kpiRateMom"></div>
+    </div>
+    <div class="kpi-card">
+      <div class="label">时间进度</div>
+      <div class="value" id="kpiTimeProgress">—</div>
+      <div class="sub" id="kpiTimeSub">—</div>
+    </div>
+    <div class="kpi-card">
+      <div class="label">达成vs时间差</div>
+      <div class="value" id="kpiVsTimeValue">—</div>
+      <div class="sub" id="kpiVsTimeSub">—</div>
+    </div>
+  </div>
+  </div>
+
+  <!-- ③ PROGRESS BARS -->
+  <div class="capture-panel" id="panelProgress">
+  <div class="section-title"><span>达成进度</span><button class="capture-btn" onclick="capturePanel('panelProgress')">📷 生成图片</button></div>
+  <div class="progress-section">
+    <div class="progress-row">
+      <div class="progress-label">⏱ 时间进度</div>
+      <div class="progress-bar-wrap">
+        <div class="progress-bar pb-time" id="pbTime" style="width:0%"></div>
+      </div>
+      <div class="progress-val" id="pbTimeVal">—</div>
+    </div>
+    <div class="progress-row">
+      <div class="progress-label">🎯 达成进度</div>
+      <div class="progress-bar-wrap">
+        <div id="pbTimeMarker" class="time-marker" style="display:none"></div>
+        <div class="progress-bar pb-achieve" id="pbAchieve" style="width:0%"></div>
+      </div>
+      <div class="progress-val" id="pbAchieveVal">—</div>
+    </div>
+    <div style="margin-top:12px;font-size:13px;color:var(--text-muted)" id="progressDiffTip"></div>
+  </div>
+  </div>
+
+  <!-- ④ 修改2：区域PK激励看板（替换原来的两个图表）-->
+  <div class="capture-panel" id="panelPK">
+  <div class="section-title"><span>区域分组 PK 激励看板</span><button class="capture-btn" onclick="capturePanel('panelPK')">📷 生成图片</button></div>
+  <div class="pk-grid" id="pkGrid">
+    <!-- 由 JS 动态渲染 -->
+  </div>
+  </div>
+
+  <!-- ⑤ 修改4：区域排名表格（新列结构：含环比）-->
+  <div class="capture-panel" id="panelRegion">
+  <div class="section-title"><span>区域排名</span><button class="capture-btn" onclick="capturePanel('panelRegion')">📷 生成图片</button></div>
+  <div class="table-card" style="margin-bottom:16px;overflow-x:auto">
+    <table id="regionTable">
+      <thead>
+        <tr>
+          <th>排名</th>
+          <th onclick="sortRegionTable(1,this)">区经 <span class="sort-icon">↕</span></th>
+          <th class="th-highlight-blue" onclick="sortRegionTable(2,this)">月度目标 <span class="sort-icon">↕</span></th>
+          <th onclick="sortRegionTable(8,this)">5月达成 <span class="sort-icon">↕</span></th>
+          <th class="th-highlight-green" onclick="sortRegionTable(3,this)">本月达成 <span class="sort-icon">↕</span></th>
+          <th onclick="sortRegionTable(9,this)">环比 <span class="sort-icon">↕</span></th>
+          <th onclick="sortRegionTable(6,this)">实收金额 <span class="sort-icon">↕</span></th>
+          <th onclick="sortRegionTable(7,this)">售后金额 <span class="sort-icon">↕</span></th>
+          <th class="th-highlight-orange" onclick="sortRegionTable(4,this)">达成率 <span class="sort-icon">↕</span></th>
+          <th>状态</th>
+        </tr>
+      </thead>
+      <tbody id="regionTableBody"></tbody>
+    </table>
+  </div>
+  </div>
+
+  <!-- ⑥ 修改5：门店明细表格（新列结构：含环比）-->
+  <div class="capture-panel" id="panelStore">
+  <div class="section-title"><span>门店明细</span><button class="capture-btn" onclick="capturePanel('panelStore')">📷 生成图片</button></div>
+  <div class="table-card" style="overflow-x:auto">
+    <div class="table-toolbar">
+      <h3>门店达成明细</h3>
+      <input type="text" class="search-input" id="storeSearch" placeholder="🔍 搜索门店名称..." oninput="renderStoreTable()">
+      <select class="filter-select" id="regionFilter" onchange="renderStoreTable()">
+        <option value="">全部区域</option>
+      </select>
+      <select class="filter-select" id="typeFilter" onchange="renderStoreTable()">
+        <option value="">正价+奥莱</option>
+        <option value="正价">正价</option>
+        <option value="奥莱">奥莱</option>
+      </select>
+      <select class="filter-select" id="statusFilter" onchange="renderStoreTable()">
+        <option value="">全部状态</option>
+        <option value="超前">超前</option>
+        <option value="正常">正常</option>
+        <option value="滞后">滞后</option>
+      </select>
+      <button class="btn btn-green" onclick="exportTableCSV()">⬇ 导出CSV</button>
+    </div>
+    <table id="storeTable">
+      <thead>
+        <tr>
+          <th class="th-store-name" onclick="sortStoreTable(0,this)">门店名称 <span class="sort-icon">↕</span></th>
+          <th onclick="sortStoreTable(1,this)">区经 <span class="sort-icon">↕</span></th>
+          <th onclick="sortStoreTable(2,this)">门店类型 <span class="sort-icon">↕</span></th>
+          <th class="th-highlight-blue" onclick="sortStoreTable(3,this)">月度目标 <span class="sort-icon">↕</span></th>
+          <th onclick="sortStoreTable(10,this)">5月达成 <span class="sort-icon">↕</span></th>
+          <th class="th-highlight-green" onclick="sortStoreTable(4,this)">本月达成 <span class="sort-icon">↕</span></th>
+          <th onclick="sortStoreTable(11,this)">环比 <span class="sort-icon">↕</span></th>
+          <th onclick="sortStoreTable(9,this)">实收金额 <span class="sort-icon">↕</span></th>
+          <th onclick="sortStoreTable(12,this)">售后金额 <span class="sort-icon">↕</span></th>
+          <th class="th-highlight-orange" onclick="sortStoreTable(5,this)">达成率 <span class="sort-icon">↕</span></th>
+          <th onclick="sortStoreTable(8,this)">状态 <span class="sort-icon">↕</span></th>
+        </tr>
+      </thead>
+      <tbody id="storeTableBody"></tbody>
+    </table>
+    <div class="pagination" id="storePagination"></div>
+  </div>
+  </div>
+
+  <!-- ⑦ 导购个人业绩明细 -->
+  <div class="capture-panel" id="panelGuide">
+  <div class="section-title"><span>👤 导购个人业绩明细</span><button class="capture-btn" onclick="capturePanel('panelGuide')">📷 生成图片</button></div>
+
+  <!-- 对账折叠面板 -->
+  <details class="audit-panel" id="auditPanel">
+    <summary>
+      <div class="audit-summary-left">
+        <span>📋 门店导购对账</span>
+      </div>
+      <div class="audit-kpis" id="auditKpisRow">
+        <span style="font-size:12px;color:var(--text-muted)">导入导购数据后自动对账</span>
+      </div>
+    </summary>
+    <div class="audit-panel-body">
+      <div id="auditTableWrap">
+        <p style="color:var(--text-muted);font-size:13px;padding:8px 0;">暂无导购数据，请先导入导购业绩文件。</p>
+      </div>
+    </div>
+  </details>
+
+  <!-- 导购列表区 -->
+  <div class="guide-section" style="margin-top:12px">
+    <div class="guide-toolbar">
+      <input type="text" class="search-input" id="guideSearch" placeholder="🔍 搜索导购姓名..." oninput="renderGuideTable()" style="width:180px">
+      <select class="filter-select" id="guideRegionFilter" onchange="onGuideRegionChange()">
+        <option value="">全部区域</option>
+      </select>
+      <select class="filter-select" id="guideStoreFilter" onchange="renderGuideTable()">
+        <option value="">全部门店</option>
+      </select>
+      <select class="filter-select" id="guideSortSelect" onchange="renderGuideTable()">
+        <option value="">默认排序（点击表头排序）</option>
+        <option value="amount_desc">实收金额 高→低</option>
+        <option value="amount_asc">实收金额 低→高</option>
+        <option value="store">按门店分组</option>
+      </select>
+      <span id="guideTotalBadge" style="font-size:12px;color:var(--text-muted);margin-left:auto"></span>
+    </div>
+    <div id="guideTableWrap">
+      <div class="guide-empty">
+        📭 暂无导购数据<br>
+        <span style="font-size:12px;margin-top:8px;display:block">请在上方数据导入区选择"👤 导购个人业绩"并上传文件</span>
+      </div>
+    </div>
+  </div>
+  </div>
+
+</div><!-- /container -->
+
+<!-- 确认清空弹窗 -->
+<div class="modal-overlay" id="clearModal">
+  <div class="modal-box">
+    <button class="modal-close" onclick="document.getElementById('clearModal').classList.remove('open')">✕</button>
+    <h3>⚠️ 确认清空数据</h3>
+    <p style="margin:16px 0;color:var(--text-muted);font-size:14px;">清空后所有已导入的门店业绩数据将被删除，<strong>不可恢复</strong>。确认继续？</p>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn" onclick="document.getElementById('clearModal').classList.remove('open')">取消</button>
+      <button class="btn btn-danger" onclick="clearData()">确认清空</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+//  CONSTANTS & GLOBALS
+// ============================================================
+const LS_KEY = 'mop_perf_data_v2';
+const LS_META_KEY = 'mop_perf_meta_v2';
+const LS_PREV_KEY = 'mop_perf_prev_v2'; // 上月数据存储key
+
+// 数据结构扩展：新增 actual_receipt（实收金额）、after_sales（售后金额）
+let storeData = [];
+/* 每条记录格式：
+{
+  store_no, store_name, store_type, region,
+  target, achieved,
+  actual_receipt,  // 实收金额（可选，默认null）
+  after_sales      // 售后金额（可选，默认null）
+}
+*/
+
+let timeProgress = 0;
+let currentMonth = '';
+let currentDay = 0;
+let totalDays = 0;
+let storeSortCol = 5;
+let storeSortDir = -1;
+let regionSortCol = 4;
+let regionSortDir = -1;
+let storeCurrentPage = 1;
+const PAGE_SIZE = 20;
+
+// ============================================================
+//  修改2：PK激励规则配置（固定规则，与Excel截图保持一致）
+// ============================================================
+const PK_RULES = [
+  {
+    group: '第1组',
+    prize: 800,
+    regionA: { name: '北京', manager: '王丹' },
+    regionB: { name: '成都', manager: '王雪' },
+    // region字段匹配storeData中的region值
+    regionAKey: '王丹',
+    regionBKey: '王雪',
+  },
+  {
+    group: '第2组',
+    prize: 500,
+    regionA: { name: '上海杭州', manager: '邱丽' },
+    regionB: { name: '深圳温州', manager: '季陈乐' },
+    regionAKey: '邱丽',
+    regionBKey: '季陈乐',
+  },
+  {
+    group: '第3组',
+    prize: 300,
+    regionA: { name: '武汉', manager: '武瑾' },
+    regionB: { name: '西安', manager: '刘吉莹' },
+    regionAKey: '武瑾',
+    regionBKey: '刘吉莹',
+  },
+];
+
+// ============================================================
+//  环比数据：5月同期数据（用于环比计算，从5月Excel导入）
+//  格式：{ [store_no]: { name, region, target, achieved, receipt, after } }
+//  环比增幅 = (本月达成 - 上月达成) / |上月达成| × 100%
+//  特殊处理：上月达成=0时显示"-"；上月达成<0时用绝对值做分母
+// ============================================================
+const PREV_MONTH_LABEL = '5月'; // 上月标签，用于表头显示
+const PREV_MONTH_DATA = {
+  '95SHAS2991': { name: "MOP深圳布吉万象汇MALL", region: "季陈乐", target: 2000, achieved: 10414, receipt: 11622, after: 1082 },
+  '95SHAS3001': { name: "MOP深圳中航城君尚购物中心MALL", region: "季陈乐", target: 2000, achieved: 3586, receipt: 5331, after: 1745 },
+  '95SHAS2562': { name: "MOP温州滨江万象城MALL", region: "季陈乐", target: 4200, achieved: 6881.5, receipt: 13493.5, after: 3099 },
+  '95SHAS0711': { name: "MOP温州万象城MALL", region: "季陈乐", target: 6750, achieved: 9168, receipt: 12690, after: 1489 },
+  '95SHAS0651': { name: "MOP深圳龙岗万科MALL", region: "季陈乐", target: 9900, achieved: 6641.6, receipt: 19569.2, after: 10000.6 },
+  '95SHAS2861': { name: "MOP深圳坂田万科MALL", region: "季陈乐", target: 1800, achieved: 834, receipt: 1529, after: 695 },
+  '95SHAS3061': { name: "MOP深圳东莞益田假日奥莱", region: "季陈乐", target: 5400, achieved: 887, receipt: 1709, after: 822 },
+  '95SHAS2981': { name: "MOP西安GPARK广场", region: "刘吉莹", target: 8500, achieved: 11248.4, receipt: 26543.4, after: 7153 },
+  '95SHAS2921': { name: "MOP西安万象城MALL", region: "刘吉莹", target: 8000, achieved: 8170.7, receipt: 30895.8, after: 9990.1 },
+  '95SHAS0521': { name: "MOP西安王府井赛特临潼奥莱", region: "刘吉莹", target: 9000, achieved: 5315, receipt: 13626, after: 1896 },
+  '95SHAS0301': { name: "MOP精选店", region: "邱丽", target: 0, achieved: 1227.3, receipt: 3997, after: 1572.7 },
+  '95SHAS2571': { name: "MOP上海真如环宇城MALL", region: "邱丽", target: 6650, achieved: 11289, receipt: 30166, after: 6658 },
+  '95SHAS2641': { name: "MOP上海龙湖闵行天街MALL", region: "邱丽", target: 3900, achieved: 5469, receipt: 13462, after: 5257 },
+  '95SHAS0092': { name: "MOP上海徐汇汇金百货专柜", region: "邱丽", target: 3300, achieved: 4623, receipt: 9440, after: 2740 },
+  '95SHAS0121': { name: "MOP上海凯德LUONEMALL", region: "邱丽", target: 13050, achieved: 15667.2, receipt: 61047.4, after: 23037.2 },
+  '95SH1S0031': { name: "MOP苏州比斯特购物村", region: "邱丽", target: 1500, achieved: 1659, receipt: 3318, after: 1659 },
+  '95SH1S0041': { name: "MOP杭州下沙奥莱", region: "邱丽", target: 3000, achieved: 3307.8, receipt: 8669.6, after: 4387.8 },
+  '95SHAS2541': { name: "MOP杭州城北万象城MALL", region: "邱丽", target: 2100, achieved: 2232.7, receipt: 4175.7, after: 1446 },
+  '95SHAS0091': { name: "MOP上海龙湖宝山天街MALL", region: "邱丽", target: 2450, achieved: 490, receipt: 4195, after: 1721 },
+  '95SHAS0202': { name: "MOP上海大宁久光MALL", region: "邱丽", target: 4500, achieved: 30, receipt: 7034, after: 1480 },
+  '95SHAS0211': { name: "MOP北京东方广场MALL", region: "王丹", target: 12000, achieved: 23139.25, receipt: 28299.25, after: 4892 },
+  '95SHAS2782': { name: "MOP北京翠微百货店", region: "王丹", target: 2000, achieved: 2711, receipt: 7129, after: 2792 },
+  '95SHAS0281': { name: "MOP北京龙湖亦庄天街MALL", region: "王丹", target: 4900, achieved: 5626, receipt: 7952, after: 1907 },
+  '95SHAS3011': { name: "MOP北京湾里王府井WellTown奥莱", region: "王丹", target: 5000, achieved: 5658, receipt: 14604, after: 4455 },
+  '95SHAS2883': { name: "MOP北京双安百货专柜", region: "王丹", target: 2000, achieved: 2169, receipt: 4890, after: 2504 },
+  '95SHAS0221': { name: "MOP北京金源燕莎MALL", region: "王丹", target: 9000, achieved: 9694.2, receipt: 19122.2, after: 2633 },
+  '95SHAS0231': { name: "MOP北京凤凰汇MALL", region: "王丹", target: 6750, achieved: 7168.6, receipt: 9613.6, after: 1030 },
+  '95SHAS2551': { name: "MOP北京王府井UPTOWN奥莱", region: "王丹", target: 3000, achieved: 3050, receipt: 6870, after: 2793 },
+  '95SHAS0261': { name: "MOP北京龙湖丽泽天街MALL", region: "王丹", target: 10000, achieved: 9117.7, receipt: 21664.3, after: 9912.6 },
+  '95SHAS2771': { name: "MOP北京首开万象汇MALL", region: "王丹", target: 3000, achieved: 2523.6, receipt: 6543.6, after: 2075 },
+  '95SHAS0271': { name: "MOP北京龙湖长楹天街MALL", region: "王丹", target: 9000, achieved: 7484.45, receipt: 10316.45, after: 584 },
+  '95SHAS0571': { name: "MOP成都金牛凯德MALL", region: "王雪", target: 7000, achieved: 11384.65, receipt: 18208.65, after: 5660 },
+  '95SHAS2801': { name: "MOP成都杉杉奥莱", region: "王雪", target: 4000, achieved: 5112.7, receipt: 11002.7, after: 1639 },
+  '95SHAS0561': { name: "MOP成都龙湖西宸天街MALL", region: "王雪", target: 11000, achieved: 13688.6, receipt: 21147.6, after: 6856 },
+  '95SHAS2851': { name: "MOP成都天府和悦广场MALL", region: "王雪", target: 4000, achieved: 4741, receipt: 15648, after: 4039 },
+  '95SHAS0601': { name: "MOP成都大魔方MALL", region: "王雪", target: 4000, achieved: 4343, receipt: 6982, after: 1480 },
+  '95SHAS0541': { name: "MOP成都太古里MALL", region: "王雪", target: 11000, achieved: 11834.4, receipt: 20737.4, after: 4048 },
+  '95SHAS0551': { name: "MOP成都悠方MALL", region: "王雪", target: 11000, achieved: 10690.8, receipt: 25300.8, after: 11279 },
+  '95SHAS2871': { name: "MOP成都七一国际广场MALL", region: "王雪", target: 4000, achieved: 876, receipt: 1823, after: 753 },
+  '95SHAS3081': { name: "MOP成都合生汇MALL", region: "王雪", target: 3600, achieved: 11, receipt: 999, after: 552 },
+  '95SHAS2811': { name: "MOP大连杉杉奥莱", region: "王原园", target: 2000, achieved: 2085, receipt: 6697, after: 2176 },
+  '95SHAS2631': { name: "MOP武汉壹方天地MALL", region: "武瑾", target: 3300, achieved: 8811, receipt: 19961, after: 6282 },
+  '95SHAS3101': { name: "MOP武汉首创奥莱", region: "武瑾", target: 2000, achieved: 2547, receipt: 6608, after: 1459 },
+  '95SHAS3041': { name: "MOP武汉武商梦时代MALL", region: "武瑾", target: 2400, achieved: 2964, receipt: 4723, after: 707 },
+  '95SHAS3071': { name: "MOP武汉杉杉奥莱", region: "武瑾", target: 2000, achieved: 2290, receipt: 2406, after: 0 },
+  '95SHAS0761': { name: "Marc O'Polo  精选店", region: "张瑛", target: 20000, achieved: 30847, receipt: 195894, after: 76334 },
+};
+
+// ============================================================
+//  环比计算核心函数
+// ============================================================
+/**
+ * 计算环比增幅
+ * @param {number} curVal  本月达成
+ * @param {number} prevVal 上月达成
+ * @returns {number|null} 环比增幅百分比，如 15.3 表示 +15.3%；null表示无法计算
+ * 边界处理：
+ *   - 上月达成=0 且本月>0：返回null（显示"新增"）
+ *   - 上月达成=0 且本月=0：返回null（显示"-"）
+ *   - 上月达成<0：用绝对值做分母
+ */
+function calcMoM(curVal, prevVal) {
+  if (prevVal === 0) return null; // 无法计算
+  return ((curVal - prevVal) / Math.abs(prevVal)) * 100;
+}
+
+/**
+ * 渲染环比增幅HTML
+ * @param {number|null} rate 环比增幅
+ * @returns {string} HTML字符串
+ */
+function renderMoM(rate) {
+  if (rate === null) return '<span style="color:var(--text-muted)">—</span>';
+  const isUp = rate >= 0;
+  const arrow = isUp ? '↑' : '↓';
+  const color = isUp ? 'var(--green)' : 'var(--red)';
+  const sign = isUp ? '+' : '';
+  return `<span style="color:${color};font-weight:600">${arrow} ${sign}${rate.toFixed(1)}%</span>`;
+}
+
+/**
+ * 获取门店的5月达成数据
+ * @param {object} store 当前门店记录
+ * @returns {number|null} 5月达成金额，null表示无数据
+ */
+function getPrevAchieved(store) {
+  const prev = PREV_MONTH_DATA[store.store_no];
+  return prev ? prev.achieved : null;
+}
+
+/**
+ * 获取上月汇总数据（用于KPI环比）
+ * @returns {{ prevTarget: number, prevAchieved: number, prevRate: number }}
+ */
+function getPrevMonthTotals() {
+  let prevTarget = 0, prevAchieved = 0;
+  for (const key in PREV_MONTH_DATA) {
+    prevTarget += PREV_MONTH_DATA[key].target || 0;
+    prevAchieved += PREV_MONTH_DATA[key].achieved || 0;
+  }
+  return { prevTarget, prevAchieved, prevRate: prevTarget > 0 ? (prevAchieved / prevTarget) * 100 : 0 };
+}
+
+/**
+ * 渲染KPI卡片环比行HTML
+ * @param {number|null} rate 环比增幅
+ * @returns {string} HTML
+ */
+function renderKpiMoM(rate) {
+  if (rate === null) return '<div class="kpi-mom" style="color:var(--text-muted)">环比上月 —</div>';
+  const isUp = rate >= 0;
+  const arrow = isUp ? '↑' : '↓';
+  const color = isUp ? 'var(--green)' : 'var(--red)';
+  const sign = isUp ? '+' : '';
+  return `<div class="kpi-mom" style="color:${color}">环比上月 ${arrow} ${sign}${rate.toFixed(1)}%</div>`;
+}
+// ============================================================
+// 全局错误捕获 - 可视化显示
+window.onerror = function(msg, src, line, col, err) {
+  console.error('全局错误:', msg, src, line);
+  const dbg = document.getElementById('debugBanner');
+  if (dbg) dbg.innerHTML += '<div style="background:#fee2e2;padding:6px 12px;margin:2px 0;border-left:3px solid #dc2626;font-size:12px;">❌ ' + msg + ' (行' + line + ')</div>';
+  return false;
+};
+window.addEventListener('unhandledrejection', function(e) {
+  console.error('未捕获Promise:', e.reason);
+  const dbg = document.getElementById('debugBanner');
+  if (dbg) dbg.innerHTML += '<div style="background:#fef3c7;padding:6px 12px;margin:2px 0;border-left:3px solid #d97706;font-size:12px;">⚠️ Promise错误: ' + e.reason + '</div>';
+});
+
+window.addEventListener('DOMContentLoaded', () => {
+  const dbg = document.getElementById('debugBanner');
+  try {
+    calcTimeProgress();
+    if(dbg) dbg.innerHTML += '<div style="color:#16a34a;font-size:12px;">✅ calcTimeProgress OK</div>';
+  } catch(e) { if(dbg) dbg.innerHTML += '<div style="color:#dc2626;font-size:12px;">❌ calcTimeProgress: '+e.message+'</div>'; }
+  try {
+    updateTopBadge();
+    if(dbg) dbg.innerHTML += '<div style="color:#16a34a;font-size:12px;">✅ updateTopBadge OK</div>';
+  } catch(e) { if(dbg) dbg.innerHTML += '<div style="color:#dc2626;font-size:12px;">❌ updateTopBadge: '+e.message+'</div>'; }
+  try {
+    loadFromStorage();
+    if(dbg) dbg.innerHTML += '<div style="color:#16a34a;font-size:12px;">✅ loadFromStorage OK</div>';
+  } catch(e) { if(dbg) dbg.innerHTML += '<div style="color:#dc2626;font-size:12px;">❌ loadFromStorage: '+e.message+'</div>'; }
+  try {
+    setupDragDrop();
+    if(dbg) dbg.innerHTML += '<div style="color:#16a34a;font-size:12px;">✅ setupDragDrop OK</div>';
+  } catch(e) { if(dbg) dbg.innerHTML += '<div style="color:#dc2626;font-size:12px;">❌ setupDragDrop: '+e.message+'</div>'; }
+  // 用 addEventListener 绑定文件上传（比内联 onchange 更可靠）
+  try {
+    const fi = document.getElementById('fileInput');
+    if (fi) fi.addEventListener('change', handleFileUpload);
+    const gi = document.getElementById('guideFileInput');
+    if (gi) gi.addEventListener('change', handleGuideFileUpload);
+    if(dbg) dbg.innerHTML += '<div style="color:#16a34a;font-size:12px;">✅ 文件上传事件绑定OK</div>';
+  } catch(e) { if(dbg) dbg.innerHTML += '<div style="color:#dc2626;font-size:12px;">❌ 事件绑定失败: '+e.message+'</div>'; }
+  setInterval(() => { calcTimeProgress(); updateTopBadge(); refreshAll(); }, 60000);
+  // 调试面板不自动隐藏（手动点击关闭）
+  // setTimeout(() => { const d=document.getElementById('debugBanner'); if(d) d.style.display='none'; }, 8000);
+});
+
+// ============================================================
+//  TIME PROGRESS CALCULATION
+// ============================================================
+function calcTimeProgress() {
+  const now = new Date();
+  const y = now.getFullYear(), m = now.getMonth();
+  currentDay = now.getDate();
+  totalDays = new Date(y, m + 1, 0).getDate();
+  const elapsed = currentDay - 1 + now.getHours() / 24;
+  timeProgress = Math.min((elapsed / totalDays) * 100, 100);
+  currentMonth = `${m + 1}月`;
+  document.getElementById('kpiTimeProgress').textContent = currentMonth + currentDay + '日';
+  document.getElementById('kpiTimeSub').textContent = `时间进度 ${timeProgress.toFixed(1)}%（${currentDay-1}/${totalDays}天已过）`;
+  document.getElementById('topTimeBadge').textContent = `${currentMonth}${currentDay}日 | 时间进度 ${timeProgress.toFixed(1)}%`;
+}
+
+// ============================================================
+//  STORAGE
+// ============================================================
+function saveToStorage() {
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify(storeData));
+    localStorage.setItem(LS_META_KEY, JSON.stringify({ updatedAt: new Date().toISOString() }));
+  } catch(e) { showToast('⚠️ 存储空间不足，数据未保存'); }
+}
+
+function loadFromStorage() {
+  const DEFAULT_REGION = '张瑛';
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (raw) {
+      storeData = JSON.parse(raw);
+      storeData.forEach(s => { if (!s.region || s.region.trim() === '') s.region = DEFAULT_REGION; });
+      refreshAll();
+    } else {
+      loadSampleData();
+    }
+  } catch(e) { loadSampleData(); }
+  // 恢复导购数据
+  loadGuideFromStorage();
+}
+
+function confirmClearData() { document.getElementById('clearModal').classList.add('open'); }
+function clearData() {
+  storeData = [];
+  saveToStorage();
+  refreshAll();
+  document.getElementById('clearModal').classList.remove('open');
+  showToast('✅ 数据已清空');
+}
+
+// ============================================================
+//  SAMPLE DATA（基于真实Excel结构，新增实收/售后字段示例）
+// ============================================================
+function loadSampleData() {
+  storeData = [
+    // 张瑛区域
+    { store_no:'95SHAS0761', store_name:"Marc O'Polo 精选店", store_type:'', region:'张瑛', target:20000, achieved:63056.06, actual_receipt:66500, after_sales:3444 },
+    // 王丹区域（北京）
+    { store_no:'95SHAS2782', store_name:'MOP北京翠微百货店', store_type:'正价', region:'王丹', target:2000, achieved:4397.6, actual_receipt:4800, after_sales:402 },
+    { store_no:'95SHAS0261', store_name:'MOP北京龙湖丽泽天街MALL', store_type:'正价', region:'王丹', target:9300, achieved:11991.85, actual_receipt:12500, after_sales:508 },
+    { store_no:'95SHAS0211', store_name:'MOP北京东方广场MALL', store_type:'正价', region:'王丹', target:9700, achieved:-3880.8, actual_receipt:1200, after_sales:5081 },
+    { store_no:'95SHAS3011', store_name:'MOP北京湾里王府井WellTown奥莱', store_type:'奥莱', region:'王丹', target:4000, achieved:3115, actual_receipt:3500, after_sales:385 },
+    { store_no:'95SHAS0221', store_name:'MOP北京金源燕莎MALL', store_type:'正价', region:'王丹', target:11700, achieved:5461, actual_receipt:6000, after_sales:539 },
+    { store_no:'95SHAS0271', store_name:'MOP北京龙湖长楹天街MALL', store_type:'正价', region:'王丹', target:11250, achieved:2173, actual_receipt:2500, after_sales:327 },
+    { store_no:'95SHAS0231', store_name:'MOP北京凤凰汇MALL', store_type:'正价', region:'王丹', target:7650, achieved:1535, actual_receipt:1800, after_sales:265 },
+    { store_no:'95SHAS2551', store_name:'MOP北京王府井UPTOWN奥莱', store_type:'奥莱', region:'王丹', target:4000, achieved:2337, actual_receipt:2600, after_sales:263 },
+    { store_no:'95SHAS0281', store_name:'MOP北京龙湖亦庄天街MALL', store_type:'正价', region:'王丹', target:5250, achieved:-457, actual_receipt:500, after_sales:957 },
+    { store_no:'95SHAS2883', store_name:'MOP北京双安百货专柜', store_type:'正价', region:'王丹', target:3000, achieved:0, actual_receipt:0, after_sales:0 },
+    { store_no:'95SHAS2771', store_name:'MOP北京首开万象汇MALL', store_type:'正价', region:'王丹', target:3000, achieved:-582, actual_receipt:200, after_sales:782 },
+    // 邱丽区域（上海杭州）
+    { store_no:'95SHAS0121', store_name:'MOP上海凯德LUONEMALL', store_type:'正价', region:'邱丽', target:8450, achieved:12126, actual_receipt:12800, after_sales:674 },
+    { store_no:'95SH1S0041', store_name:'MOP杭州下沙奥莱', store_type:'奥莱', region:'邱丽', target:2000, achieved:1976, actual_receipt:2100, after_sales:124 },
+    { store_no:'95SHAS0092', store_name:'MOP上海徐汇汇金百货专柜', store_type:'正价', region:'邱丽', target:3900, achieved:1661, actual_receipt:1900, after_sales:239 },
+    { store_no:'95SHAS2641', store_name:'MOP上海龙湖闵行天街MALL', store_type:'正价', region:'邱丽', target:2850, achieved:-1422, actual_receipt:300, after_sales:1722 },
+    { store_no:'95SHAS2571', store_name:'MOP上海真如环宇城MALL', store_type:'正价', region:'邱丽', target:5250, achieved:-2088, actual_receipt:500, after_sales:2588 },
+    { store_no:'95SHAS0202', store_name:'MOP上海大宁久光MALL', store_type:'正价', region:'邱丽', target:4275, achieved:592, actual_receipt:800, after_sales:208 },
+    { store_no:'95SH1S0031', store_name:'MOP苏州比斯特购物村', store_type:'奥莱', region:'邱丽', target:3000, achieved:300, actual_receipt:400, after_sales:100 },
+    { store_no:'95SHAS2541', store_name:'MOP杭州城北万象城MALL', store_type:'正价', region:'邱丽', target:1500, achieved:-308, actual_receipt:100, after_sales:408 },
+    // 王雪区域（成都）
+    { store_no:'95SHAS0601', store_name:'MOP成都大魔方MALL', store_type:'正价', region:'王雪', target:4200, achieved:3997, actual_receipt:4200, after_sales:203 },
+    { store_no:'95SHAS2801', store_name:'MOP成都杉杉奥莱', store_type:'奥莱', region:'王雪', target:4000, achieved:3439.74, actual_receipt:3700, after_sales:260 },
+    { store_no:'95SHAS0561', store_name:'MOP成都龙湖西宸天街MALL', store_type:'正价', region:'王雪', target:11000, achieved:5738.2, actual_receipt:6200, after_sales:462 },
+    { store_no:'95SHAS0541', store_name:'MOP成都太古里MALL', store_type:'正价', region:'王雪', target:11250, achieved:-581, actual_receipt:800, after_sales:1381 },
+    { store_no:'95SHAS0551', store_name:'MOP成都悠方MALL', store_type:'正价', region:'王雪', target:8100, achieved:-2192, actual_receipt:400, after_sales:2592 },
+    { store_no:'95SHAS2871', store_name:'MOP成都七一国际广场MALL', store_type:'正价', region:'王雪', target:5000, achieved:516, actual_receipt:700, after_sales:184 },
+    { store_no:'95SHAS0571', store_name:'MOP成都金牛凯德MALL', store_type:'正价', region:'王雪', target:7650, achieved:3255, actual_receipt:3500, after_sales:245 },
+    { store_no:'95SHAS2851', store_name:'MOP成都天府和悦广场MALL', store_type:'正价', region:'王雪', target:4000, achieved:2330, actual_receipt:2500, after_sales:170 },
+    { store_no:'95SHAS3081', store_name:'MOP成都合生汇MALL', store_type:'正价', region:'王雪', target:2600, achieved:269, actual_receipt:350, after_sales:81 },
+    // 武瑾区域（武汉）
+    { store_no:'95SHAS3071', store_name:'MOP武汉杉杉奥莱', store_type:'奥莱', region:'武瑾', target:2000, achieved:1827, actual_receipt:1950, after_sales:123 },
+    { store_no:'95SHAS2631', store_name:'MOP武汉壹方天地MALL', store_type:'正价', region:'武瑾', target:2700, achieved:389, actual_receipt:500, after_sales:111 },
+    { store_no:'95SHAS3041', store_name:'MOP武汉武商梦时代MALL', store_type:'正价', region:'武瑾', target:2400, achieved:570, actual_receipt:650, after_sales:80 },
+    { store_no:'95SHAS3101', store_name:'MOP武汉首创奥莱', store_type:'奥莱', region:'武瑾', target:2000, achieved:556, actual_receipt:620, after_sales:64 },
+    // 刘吉莹区域（西安）
+    { store_no:'95SHAS2981', store_name:'MOP西安GPARK广场', store_type:'正价', region:'刘吉莹', target:6800, achieved:4001, actual_receipt:4300, after_sales:299 },
+    { store_no:'95SHAS2921', store_name:'MOP西安万象城MALL', store_type:'正价', region:'刘吉莹', target:6600, achieved:590.5, actual_receipt:700, after_sales:110 },
+    { store_no:'95SHAS0521', store_name:'MOP西安王府井赛特临潼奥莱', store_type:'奥莱', region:'刘吉莹', target:6800, achieved:534, actual_receipt:600, after_sales:66 },
+    // 季陈乐区域（深圳温州）
+    { store_no:'95SHAS2562', store_name:'MOP温州滨江万象城MALL', store_type:'正价', region:'季陈乐', target:5000, achieved:1625, actual_receipt:1800, after_sales:175 },
+    { store_no:'95SHAS2991', store_name:'MOP深圳布吉万象汇MALL', store_type:'正价', region:'季陈乐', target:3000, achieved:-334, actual_receipt:200, after_sales:534 },
+    { store_no:'95SHAS3001', store_name:'MOP深圳中航城君尚购物中心MALL', store_type:'正价', region:'季陈乐', target:4000, achieved:1642, actual_receipt:1800, after_sales:158 },
+    { store_no:'95SHAS2861', store_name:'MOP深圳坂田万科MALL', store_type:'奥莱', region:'季陈乐', target:1800, achieved:0, actual_receipt:0, after_sales:0 },
+    { store_no:'95SHAS0651', store_name:'MOP深圳龙岗万科MALL', store_type:'正价', region:'季陈乐', target:6500, achieved:960, actual_receipt:1100, after_sales:140 },
+    { store_no:'95SHAS0711', store_name:'MOP温州万象城MALL', store_type:'正价', region:'季陈乐', target:6800, achieved:2074, actual_receipt:2300, after_sales:226 },
+    { store_no:'95SHAS3061', store_name:'MOP深圳东莞益田假日奥莱', store_type:'奥莱', region:'季陈乐', target:3000, achieved:1272, actual_receipt:1400, after_sales:128 },
+  ];
+  saveToStorage();
+  refreshAll();
+  showToast('✅ 示例数据已载入（含实收/售后字段）');
+}
+
+// ============================================================
+//  FILE UPLOAD
+// ============================================================
+function setupDragDrop() {
+  const dbg = document.getElementById('debugBanner');
+  // 门店上传区
+  const zone = document.getElementById('uploadZone');
+  if (!zone) {
+    if(dbg) dbg.innerHTML += '<div style="color:#dc2626;font-size:12px;">❌ uploadZone 元素不存在！</div>';
+    return;
+  }
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault(); zone.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (file) processFile(file);
+  });
+  // 导购上传区
+  const guideZone = document.getElementById('guideUploadZone');
+  if (!guideZone) {
+    if(dbg) dbg.innerHTML += '<div style="color:#d97706;font-size:12px;">⚠️ guideUploadZone 元素不存在</div>';
+  } else {
+    guideZone.addEventListener('dragover', e => { e.preventDefault(); guideZone.classList.add('drag-over'); });
+    guideZone.addEventListener('dragleave', () => guideZone.classList.remove('drag-over'));
+    guideZone.addEventListener('drop', e => {
+      e.preventDefault(); guideZone.classList.remove('drag-over');
+      const file = e.dataTransfer.files[0];
+      if (file) processGuideFile(file);
+    });
+    if(dbg) dbg.innerHTML += '<div style="color:#16a34a;font-size:12px;">✅ guideUploadZone 绑定OK</div>';
+  }
+}
+
+function handleFileUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  showToast('⏳ 正在读取门店文件: ' + file.name);
+  console.log('[门店] 选择文件:', file.name, file.size);
+  processFile(file);
+}
+
+function processFile(file) {
+  showToast('⏳ 正在解析文件...');
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const data = new Uint8Array(e.target.result);
+      const wb = XLSX.read(data, { type: 'array' });
+      let sheetName = wb.SheetNames.find(n => n.includes('门店业绩') || n.includes('业绩') || n.includes('门店'));
+      if (!sheetName) sheetName = wb.SheetNames[0];
+      console.log('[门店] 读取工作表:', sheetName, '共', wb.SheetNames.length, '个Sheet');
+      const ws = wb.Sheets[sheetName];
+      const json = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+      console.log('[门店] 解析到行数:', json.length);
+      parseSheetRows(json, sheetName);
+    } catch(err) {
+      console.error('[门店] 解析异常:', err);
+      showToast('❌ 文件解析失败：' + err.message);
+    }
+  };
+  reader.onerror = function() {
+    showToast('❌ 文件读取失败，请重试');
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function parseSheetRows(rows, sheetName) {
+  let headerIdx = -1;
+  let headers = [];
+  for (let i = 0; i < Math.min(rows.length, 10); i++) {
+    const row = rows[i].map(v => String(v || ''));
+    if (row.some(v => v.includes('门店名称') || v.includes('门店编号'))) {
+      headerIdx = i; headers = row; break;
+    }
+  }
+  if (headerIdx < 0) { showToast('❌ 未找到表头行，请确认包含"门店名称"列'); return; }
+
+  // 列名映射（含新增字段）
+  const colIdx = {
+    store_no:       findCol(headers, ['门店编号']),
+    store_name:     findCol(headers, ['门店名称', '店铺名称']),
+    store_type:     findCol(headers, ['正价/奥莱', '类型', '门店类型']),
+    region:         findCol(headers, ['区经', '区域', '大区']),
+    target:         findCol(headers, ['6月目标', '目标', '月度目标', '小程序6月目标', '当月目标']),
+    achieved:       findCol(headers, ['6月达成', '达成', '月度达成', '累计达成', '实际达成']),
+    actual_receipt: findCol(headers, ['实收金额', '实收', 'actual_receipt']),  // 新增
+    after_sales:    findCol(headers, ['售后金额', '售后', 'after_sales']),      // 新增
+  };
+
+  if (colIdx.store_name < 0) { showToast('❌ 未找到"门店名称"列，请检查表头'); return; }
+  if (colIdx.target < 0 || colIdx.achieved < 0) { showToast('❌ 未找到目标/达成列，请检查表头'); return; }
+
+  const newData = [];
+  for (let i = headerIdx + 1; i < rows.length; i++) {
+    const row = rows[i];
+    const name = String(row[colIdx.store_name] || '').trim();
+    if (!name || name === '合计' || name === '小计') continue;
+    const target = parseFloat(row[colIdx.target]) || 0;
+    const achieved = parseFloat(row[colIdx.achieved]) || 0;
+    if (target === 0 && achieved === 0 && !name) continue;
+    newData.push({
+      store_no:       colIdx.store_no >= 0 ? String(row[colIdx.store_no] || '') : '',
+      store_name:     name,
+      store_type:     colIdx.store_type >= 0 ? String(row[colIdx.store_type] || '') : '',
+      region:         colIdx.region >= 0 ? String(row[colIdx.region] || '') : '',
+      target,
+      achieved,
+      actual_receipt: colIdx.actual_receipt >= 0 ? (parseFloat(row[colIdx.actual_receipt]) || null) : null,
+      after_sales:    colIdx.after_sales >= 0 ? (parseFloat(row[colIdx.after_sales]) || null) : null,
+    });
+  }
+
+  if (newData.length === 0) { showToast('❌ 解析到0条门店数据，请检查数据格式'); return; }
+
+  // 无区经信息的门店，金额归属到 Marc O'Polo 精选店（区经=张瑛）
+  const DEFAULT_REGION = '张瑛';
+  newData.forEach(s => {
+    if (!s.region || s.region.trim() === '') {
+      s.region = DEFAULT_REGION;
+    }
+  });
+
+  storeData = newData;
+  saveToStorage();
+  refreshAll();
+  document.getElementById('dataPanel').removeAttribute('open');
+  showToast(`✅ 导入成功！共 ${newData.length} 家门店（来自工作表"${sheetName}"）`);
+}
+
+function findCol(headers, names) {
+  for (const n of names) {
+    const idx = headers.findIndex(h => String(h).includes(n));
+    if (idx >= 0) return idx;
+  }
+  return -1;
+}
+
+// ============================================================
+//  PASTE DATA PARSER
+// ============================================================
+function parsePasteData() {
+  const text = document.getElementById('pasteArea').value.trim();
+  if (!text) { showToast('❌ 请先粘贴数据'); return; }
+  const rows = text.split('\n').map(r => r.split('\t'));
+  parseSheetRows(rows, '粘贴数据');
+}
+
+// ============================================================
+//  TAB SWITCH
+// ============================================================
+function switchInputTab(tab, btn) {
+  if (tab === 'upload' || tab === 'paste') {
+    document.querySelectorAll('#dataAreaStore .tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tabUpload').style.display = tab === 'upload' ? '' : 'none';
+    document.getElementById('tabPaste').style.display = tab === 'paste' ? '' : 'none';
+  } else if (tab === 'guideUpload' || tab === 'guidePaste') {
+    document.querySelectorAll('#dataAreaGuide .tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tabGuideUpload').style.display = tab === 'guideUpload' ? '' : 'none';
+    document.getElementById('tabGuidePaste').style.display = tab === 'guidePaste' ? '' : 'none';
+  }
+}
+
+// ============================================================
+//  COMPUTED DATA
+// ============================================================
+function getRegionData() {
+  const map = {};
+  for (const s of storeData) {
+    const r = s.region || '张瑛';
+    if (!map[r]) map[r] = { region: r, target: 0, achieved: 0, actual_receipt: 0, after_sales: 0, hasReceipt: false, prevAchieved: 0, hasPrev: false, stores: [] };
+    map[r].target += s.target;
+    map[r].achieved += s.achieved;
+    // 环比：累加该区域内各门店的5月达成
+    const prevA = getPrevAchieved(s);
+    if (prevA !== null) {
+      map[r].prevAchieved += prevA;
+      map[r].hasPrev = true;
+    }
+    if (s.actual_receipt !== null && s.actual_receipt !== undefined) {
+      map[r].actual_receipt += (s.actual_receipt || 0);
+      map[r].hasReceipt = true;
+    }
+    if (s.after_sales !== null && s.after_sales !== undefined) {
+      map[r].after_sales += (s.after_sales || 0);
+    }
+    map[r].stores.push(s);
+  }
+  return Object.values(map).filter(r => r.target > 0 || r.achieved !== 0);
+}
+
+function getRate(achieved, target) {
+  if (target <= 0) return achieved > 0 ? 9999 : 0;
+  return (achieved / target) * 100;
+}
+
+function getStatus(rate, tp) {
+  const diff = rate - tp;
+  if (diff >= 5) return '超前';
+  if (diff >= -10) return '正常';
+  return '滞后';
+}
+
+// ============================================================
+//  REFRESH ALL
+// ============================================================
+function refreshAll() {
+  calcTimeProgress();
+  updateKPIs();
+  updateProgressBars();
+  renderPKSection();
+  renderRegionTable();
+  renderStoreTable();
+  populateFilters();
+  // 门店数据更新后，重建导购关联（如已有导购数据）
+  if (guideRawData && guideRawData.length > 0) {
+    buildGuideMap();
+    renderGuideSection();
+  }
+}
+
+// ============================================================
+//  KPI UPDATE
+// ============================================================
+function updateKPIs() {
+  const totalTarget = storeData.reduce((s, d) => s + (d.target > 0 ? d.target : 0), 0);
+  const totalAchieved = storeData.reduce((s, d) => s + d.achieved, 0);
+  const rate = getRate(totalAchieved, totalTarget);
+  const gapVal = totalAchieved - totalTarget;
+  const diff = rate - timeProgress;
+  const daysEquiv = Math.abs((diff / 100) * totalDays).toFixed(1);
+
+  // 上月汇总
+  const prev = getPrevMonthTotals();
+
+  // 卡片1：月度总目标
+  document.getElementById('kpiTarget').textContent = fmtMoney(totalTarget);
+  document.getElementById('kpiStoreCount').textContent = `${storeData.length} 家门店`;
+  const targetMom = calcMoM(totalTarget, prev.prevTarget);
+  document.getElementById('kpiTargetMom').innerHTML = renderKpiMoM(targetMom);
+
+  // 卡片2：当前累计达成
+  document.getElementById('kpiAchieved').textContent = fmtMoney(Math.max(0, totalAchieved));
+  document.getElementById('kpiAchievedSub').textContent = `较目标 ${gapVal >= 0 ? '+' : ''}${fmtMoney(gapVal)}`;
+  const achievedMom = calcMoM(Math.max(0, totalAchieved), prev.prevAchieved);
+  document.getElementById('kpiAchievedMom').innerHTML = renderKpiMoM(achievedMom);
+
+  // 卡片3：较目标差额
+  const gapEl = document.getElementById('kpiGapValue');
+  gapEl.textContent = (gapVal >= 0 ? '+' : '') + fmtMoney(gapVal);
+  gapEl.style.color = gapVal >= 0 ? 'var(--green)' : 'var(--red)';
+  document.getElementById('kpiGapSub').textContent = gapVal >= 0 ? '已超额完成 🎉' : '距目标还差';
+
+  // 卡片4：整体达成率
+  const rateEl = document.getElementById('kpiRate');
+  rateEl.textContent = rate.toFixed(1) + '%';
+  rateEl.className = 'value ' + (rate >= timeProgress ? 'rate-green' : 'rate-red');
+
+  const tagEl = document.getElementById('kpiRateTag');
+  const status = getStatus(rate, timeProgress);
+  const icon = status === '超前' ? '🚀' : status === '正常' ? '🟡' : '⚠️';
+  const cls = status === '超前' ? 'ahead' : status === '正常' ? 'normal' : 'behind';
+  tagEl.innerHTML = `<span class="tag ${cls}">${icon} vs时间进度 ${diff >= 0 ? '+' : ''}${diff.toFixed(1)}%</span>`;
+
+  const rateMom = prev.prevRate > 0 ? calcMoM(rate, prev.prevRate) : null;
+  document.getElementById('kpiRateMom').innerHTML = renderKpiMoM(rateMom);
+
+  // 卡片5：时间进度（由calcTimeProgress更新，此处不再重复）
+
+  // 卡片6：达成vs时间差
+  const vsTimeEl = document.getElementById('kpiVsTimeValue');
+  vsTimeEl.textContent = (diff >= 0 ? '+' : '') + diff.toFixed(1) + '%';
+  vsTimeEl.style.color = diff >= 0 ? 'var(--green)' : 'var(--red)';
+  document.getElementById('kpiVsTimeSub').textContent = diff >= 0 ? `约超前 ${daysEquiv} 天` : `约滞后 ${daysEquiv} 天`;
+}
+
+// ============================================================
+//  PROGRESS BARS UPDATE
+// ============================================================
+function updateProgressBars() {
+  const totalTarget = storeData.reduce((s, d) => s + (d.target > 0 ? d.target : 0), 0);
+  const totalAchieved = storeData.reduce((s, d) => s + d.achieved, 0);
+  const rate = getRate(totalAchieved, totalTarget);
+  const tp = timeProgress;
+
+  const pbTime = document.getElementById('pbTime');
+  pbTime.style.width = Math.min(tp, 100) + '%';
+  document.getElementById('pbTimeVal').textContent = tp.toFixed(1) + '%';
+  document.getElementById('pbTimeVal').style.color = '#3b82f6';
+
+  const pbA = document.getElementById('pbAchieve');
+  const displayRate = Math.min(Math.max(rate, 0), 150);
+  const barW = (displayRate / 150) * 100;
+  pbA.style.width = barW + '%';
+  const marker = document.getElementById('pbTimeMarker');
+  marker.style.display = '';
+  marker.style.left = ((tp / 150) * 100) + '%';
+
+  const status = getStatus(rate, tp);
+  pbA.className = 'progress-bar pb-achieve' + (status === '滞后' ? ' behind' : status === '正常' ? ' warning' : '');
+  document.getElementById('pbAchieveVal').textContent = rate.toFixed(1) + '%';
+  document.getElementById('pbAchieveVal').style.color = status === '超前' ? '#16a34a' : status === '正常' ? '#d97706' : '#dc2626';
+
+  const diff = rate - tp;
+  const daysEquiv = Math.abs((diff / 100) * totalDays).toFixed(1);
+  const tipEl = document.getElementById('progressDiffTip');
+  if (storeData.length === 0) { tipEl.textContent = '暂无数据'; return; }
+  if (diff >= 5) {
+    tipEl.innerHTML = `<span style="color:var(--green)">🚀 达成进度领先时间进度 ${diff.toFixed(1)}%，约超前 ${daysEquiv} 天！</span>`;
+  } else if (diff >= -10) {
+    tipEl.innerHTML = `<span style="color:var(--orange)">🟡 达成进度与时间进度基本持平（差值 ${diff.toFixed(1)}%）</span>`;
+  } else {
+    tipEl.innerHTML = `<span style="color:var(--red)">⚠️ 达成进度落后时间进度 ${Math.abs(diff).toFixed(1)}%，约滞后 ${daysEquiv} 天，需关注！</span>`;
+  }
+}
+
+// ============================================================
+//  修改2：PK激励看板渲染
+// ============================================================
+function renderPKSection() {
+  if (storeData.length === 0) {
+    document.getElementById('pkGrid').innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:40px;">请先导入数据</div>';
+    return;
+  }
+
+  // 按区经（manager）汇总区域数据
+  const regionMap = {};
+  for (const s of storeData) {
+    const r = s.region || '张瑛';
+    if (!regionMap[r]) regionMap[r] = { target: 0, achieved: 0 };
+    regionMap[r].target += s.target;
+    regionMap[r].achieved += s.achieved;
+  }
+
+  const getRegionStats = (key) => {
+    const d = regionMap[key] || { target: 0, achieved: 0 };
+    const rate = getRate(d.achieved, d.target);
+    const sprintTarget = d.target * 1.2;
+    const sprintRate = getRate(d.achieved, sprintTarget);
+    return {
+      target: d.target,
+      achieved: Math.max(0, d.achieved),
+      rate,
+      sprintTarget,
+      sprintRate,
+      isSprintAchieved: sprintRate >= 100,
+      sprintGap: Math.max(0, sprintTarget - Math.max(0, d.achieved)),
+    };
+  };
+
+  // 判断获胜逻辑
+  const judgeWinner = (rateA, rateB) => {
+    const aWin = rateA >= 100;
+    const bWin = rateB >= 100;
+    if (!aWin && !bWin) return 'none';
+    if (aWin && !bWin) return 'A';
+    if (!aWin && bWin) return 'B';
+    return rateA >= rateB ? 'A' : 'B';
+  };
+
+  // 达成率颜色class
+  const rateColorClass = (rate) => rate >= 100 ? 'rate-green' : rate >= 80 ? 'rate-orange' : 'rate-red';
+  // 进度条颜色
+  const barBg = (rate) => rate >= 100 ? '#16a34a' : rate >= 80 ? '#d97706' : '#dc2626';
+
+  const html = PK_RULES.map(rule => {
+    const sA = getRegionStats(rule.regionAKey);
+    const sB = getRegionStats(rule.regionBKey);
+    const winner = judgeWinner(sA.rate, sB.rate);
+
+    const classA = winner === 'A' ? 'winner' : (winner === 'B' ? 'loser' : '');
+    const classB = winner === 'B' ? 'winner' : (winner === 'A' ? 'loser' : '');
+
+    // 浮动徽章（贴在获胜方卡片右上角）
+    const floatBadgeA = winner === 'A'
+      ? `<div class="pk-winner-float win">🏆 领先</div>`
+      : (winner === 'none' && sA.rate < 100 ? `<div class="pk-winner-float not-yet">未达标</div>` : '');
+    const floatBadgeB = winner === 'B'
+      ? `<div class="pk-winner-float win">🏆 领先</div>`
+      : (winner === 'none' && sB.rate < 100 ? `<div class="pk-winner-float not-yet">未达标</div>` : '');
+
+    const renderRegionBlock = (info, stats, cls, floatBadge) => `
+      <div class="pk-region-block ${cls}">
+        ${floatBadge}
+        <div><span class="pk-region-name">${info.name}</span><span class="pk-region-mgr">${info.manager}</span></div>
+        <div class="pk-target-line">${fmtMoney(stats.target)} → <span class="pk-val">${fmtMoney(stats.achieved)}</span></div>
+        <div class="pk-rate-big ${rateColorClass(stats.rate)}">${stats.target > 0 ? stats.rate.toFixed(1)+'%' : '—'}</div>
+        <div class="pk-rate-row">
+          <div class="pk-bar-outer">
+            <div class="pk-bar-inner" style="width:${Math.min(stats.rate,100)}%;background:${barBg(stats.rate)}"></div>
+          </div>
+        </div>
+      </div>`;
+
+    const renderSprintBlock = (info, stats) => {
+      const gapText = stats.isSprintAchieved
+        ? '<span style="color:var(--green)">✅ 已达成</span>'
+        : `还差${fmtMoney(stats.sprintGap)}`;
+      const prizeCls = stats.isSprintAchieved ? 'achieved' : '';
+      const prizeText = stats.isSprintAchieved ? '🏅 ¥100' : '¥100';
+      return `
+      <div class="sprint-block">
+        <div class="sprint-title">🚀 ${info.name} 冲刺(×1.2) ${fmtMoney(stats.sprintTarget)} ${stats.target > 0 ? stats.sprintRate.toFixed(1)+'%' : '—'}</div>
+        <div class="sprint-bar-outer">
+          <div class="sprint-bar-inner ${stats.isSprintAchieved ? 'sprint-achieved' : ''}" style="width:${Math.min(stats.sprintRate, 100)}%"></div>
+        </div>
+        <div class="sprint-bar-label">
+          <span>${gapText}</span>
+          <span class="sprint-prize ${prizeCls}">${prizeText}</span>
+        </div>
+      </div>`;
+    };
+
+    return `
+    <div class="pk-card">
+      <div class="pk-card-header">
+        <span class="pk-group-label">${rule.group} PK</span>
+        <span class="pk-prize">🏆 PK激励 ${fmtMoney(rule.prize)}</span>
+      </div>
+      <div class="pk-battle">
+        ${renderRegionBlock(rule.regionA, sA, classA, floatBadgeA)}
+        <div class="pk-vs-col">
+          <div class="vs-badge">VS</div>
+        </div>
+        ${renderRegionBlock(rule.regionB, sB, classB, floatBadgeB)}
+      </div>
+      <div class="sprint-section">
+        ${renderSprintBlock(rule.regionA, sA)}
+        ${renderSprintBlock(rule.regionB, sB)}
+      </div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('pkGrid').innerHTML = html;
+}
+
+// ============================================================
+//  POPULATE FILTERS
+// ============================================================
+function populateFilters() {
+  const regions = [...new Set(storeData.map(s => s.region).filter(Boolean))].sort();
+  const rf = document.getElementById('regionFilter');
+  const current = rf.value;
+  rf.innerHTML = '<option value="">全部区域</option>';
+  regions.forEach(r => rf.innerHTML += `<option value="${r}" ${r === current ? 'selected' : ''}>${r}</option>`);
+}
+
+// ============================================================
+//  修改4：区域排名表格（新列：实收/售后，达成率改进度条）
+// ============================================================
+let regionData_cached = [];
+function renderRegionTable() {
+  const regions = getRegionData();
+  regions.sort((a, b) => {
+    const getVal = (r, col) => {
+      if (col === 1) return r.region;
+      if (col === 2) return r.target;
+      if (col === 3) return r.achieved;
+      if (col === 4) return getRate(r.achieved, r.target);
+      if (col === 6) return r.actual_receipt || 0;
+      if (col === 7) return r.after_sales || 0;
+      // 环比相关列
+      if (col === 8) return r.prevAchieved;       // 5月达成
+      if (col === 9) return r.hasPrev ? calcMoM(Math.max(0, r.achieved), r.prevAchieved) : null; // 环比
+      return 0;
+    };
+    const va = getVal(a, regionSortCol), vb = getVal(b, regionSortCol);
+    if (va === null && vb === null) return 0;
+    if (va === null) return regionSortDir;
+    if (vb === null) return -regionSortDir;
+    return regionSortDir * (va > vb ? 1 : va < vb ? -1 : 0);
+  });
+  regionData_cached = regions;
+
+  const tbody = document.getElementById('regionTableBody');
+  tbody.innerHTML = '';
+  regions.forEach((r, i) => {
+    const rate = getRate(r.achieved, r.target);
+    const status = getStatus(rate, timeProgress);
+    const badgeCls = status === '超前' ? 'badge-green' : status === '正常' ? 'badge-orange' : 'badge-red';
+    // 达成率进度条颜色
+    const barColor = rate >= 100 ? '#16a34a' : rate >= 80 ? '#d97706' : '#dc2626';
+    const barWidth = Math.min(Math.max(rate, 0), 150) / 150 * 100;
+    const rateText = r.target > 0 ? rate.toFixed(1) + '%' : '—';
+    // 进度条文字颜色（浅色背景用深色字）
+    const txtClass = barWidth < 30 ? 'dark-txt' : '';
+
+    // 实收/售后：若无数据显示 "-"
+    const receiptVal = r.hasReceipt ? fmtMoney(r.actual_receipt) : '-';
+    const afterVal = r.hasReceipt ? fmtMoney(r.after_sales) : '-';
+
+    // 环比数据
+    const prevVal = r.hasPrev ? fmtMoney(r.prevAchieved) : '-';
+    const momRate = r.hasPrev ? calcMoM(Math.max(0, r.achieved), r.prevAchieved) : null;
+    const momHtml = renderMoM(momRate);
+
+    tbody.innerHTML += `<tr>
+      <td>${i + 1}</td>
+      <td><strong>${r.region}</strong></td>
+      <td class="td-highlight-target">${fmtMoney(r.target)}</td>
+      <td>${prevVal}</td>
+      <td class="td-highlight-achieved">${fmtMoney(Math.max(0, r.achieved))}</td>
+      <td>${momHtml}</td>
+      <td>${receiptVal}</td>
+      <td>${afterVal}</td>
+      <td class="table-rate-cell">
+        <div class="table-bar-wrap">
+          <div class="table-bar-fill" style="width:${barWidth}%;background:${barColor}"></div>
+          <div class="table-bar-text ${txtClass}">${rateText}</div>
+        </div>
+      </td>
+      <td><span class="badge ${badgeCls}">${status}</span></td>
+    </tr>`;
+  });
+}
+
+function sortRegionTable(col, th) {
+  if (regionSortCol === col) regionSortDir *= -1;
+  else { regionSortCol = col; regionSortDir = -1; }
+  document.querySelectorAll('#regionTable th').forEach(t => t.classList.remove('sorted'));
+  th.classList.add('sorted');
+  th.querySelector('.sort-icon').textContent = regionSortDir > 0 ? '↑' : '↓';
+  renderRegionTable();
+}
+
+// ============================================================
+//  修改5：门店明细表格（新列：门店类型/实收/售后，去掉时间进度差）
+// ============================================================
+let filteredStoreData = [];
+function renderStoreTable() {
+  const search = document.getElementById('storeSearch').value.toLowerCase();
+  const region = document.getElementById('regionFilter').value;
+  const type = document.getElementById('typeFilter').value;
+  const statusF = document.getElementById('statusFilter').value;
+
+  filteredStoreData = storeData.filter(s => {
+    if (s.target <= 0 && s.achieved === 0) return false;
+    if (search && !s.store_name.toLowerCase().includes(search) && !s.region.toLowerCase().includes(search)) return false;
+    if (region && s.region !== region) return false;
+    if (type && s.store_type !== type) return false;
+    if (statusF) {
+      const st = getStatus(getRate(s.achieved, s.target), timeProgress);
+      if (st !== statusF) return false;
+    }
+    return true;
+  });
+
+  filteredStoreData.sort((a, b) => {
+    const getVal = (s, col) => {
+      if (col === 0) return s.store_name;
+      if (col === 1) return s.region;
+      if (col === 2) return s.store_type;
+      if (col === 3) return s.target;
+      if (col === 4) return s.achieved;
+      if (col === 5) return getRate(s.achieved, s.target);
+      if (col === 8) return getStatus(getRate(s.achieved, s.target), timeProgress);
+      if (col === 9) return s.actual_receipt || 0;
+      if (col === 10) return getPrevAchieved(s) || 0;  // 5月达成
+      if (col === 11) { // 环比增幅
+        const prev = getPrevAchieved(s);
+        return prev !== null ? calcMoM(Math.max(0, s.achieved), prev) : null;
+      }
+      if (col === 12) return s.after_sales || 0;
+      return 0;
+    };
+    const va = getVal(a, storeSortCol), vb = getVal(b, storeSortCol);
+    if (va === null && vb === null) return 0;
+    if (va === null) return storeSortDir;
+    if (vb === null) return -storeSortDir;
+    return storeSortDir * (va > vb ? 1 : va < vb ? -1 : 0);
+  });
+
+  const total = filteredStoreData.length;
+  const totalPages = Math.ceil(total / PAGE_SIZE);
+  if (storeCurrentPage > totalPages) storeCurrentPage = 1;
+  const start = (storeCurrentPage - 1) * PAGE_SIZE;
+  const pageData = filteredStoreData.slice(start, start + PAGE_SIZE);
+
+  const tbody = document.getElementById('storeTableBody');
+  tbody.innerHTML = '';
+  pageData.forEach(s => {
+    const rate = getRate(s.achieved, s.target);
+    const status = getStatus(rate, timeProgress);
+    const badgeCls = status === '超前' ? 'badge-green' : status === '正常' ? 'badge-orange' : 'badge-red';
+    // 达成率进度条（宽版，占满单元格）
+    const barColor = rate >= 100 ? '#16a34a' : rate >= 80 ? '#d97706' : '#dc2626';
+    const barW = Math.min(Math.max(rate, 0), 150) / 150 * 100;
+    const rateText = s.target > 0 ? rate.toFixed(1) + '%' : '—';
+    const txtClass = barW < 25 ? 'dark-txt' : '';
+
+    // 实收/售后
+    const receiptVal = s.actual_receipt !== null && s.actual_receipt !== undefined ? fmtMoney(s.actual_receipt) : '-';
+    const afterVal = s.after_sales !== null && s.after_sales !== undefined ? fmtMoney(s.after_sales) : '-';
+
+    // 环比数据
+    const prevA = getPrevAchieved(s);
+    const prevVal = prevA !== null ? fmtMoney(prevA) : '-';
+    const momRate = prevA !== null ? calcMoM(Math.max(0, s.achieved), prevA) : null;
+    const momHtml = renderMoM(momRate);
+
+    tbody.innerHTML += `<tr>
+      <td class="td-store-name" title="${s.store_name}">${s.store_name.length > 18 ? s.store_name.slice(0,18)+'…' : s.store_name}</td>
+      <td>${s.region || '-'}</td>
+      <td>${s.store_type || '-'}</td>
+      <td class="td-highlight-target">${fmtMoney(s.target)}</td>
+      <td>${prevVal}</td>
+      <td class="td-highlight-achieved">${fmtMoney(Math.max(0, s.achieved))}</td>
+      <td>${momHtml}</td>
+      <td>${receiptVal}</td>
+      <td>${afterVal}</td>
+      <td class="table-rate-cell">
+        <div class="table-bar-wrap">
+          <div class="table-bar-fill" style="width:${barW}%;background:${barColor}"></div>
+          <div class="table-bar-text ${txtClass}">${rateText}</div>
+        </div>
+      </td>
+      <td><span class="badge ${badgeCls}">${status}</span></td>
+    </tr>`;
+  });
+
+  renderPagination(totalPages);
+}
+
+function renderPagination(totalPages) {
+  const container = document.getElementById('storePagination');
+  container.innerHTML = '';
+  if (totalPages <= 1) return;
+  const total = filteredStoreData.length;
+  const start = (storeCurrentPage - 1) * PAGE_SIZE + 1;
+  const end = Math.min(storeCurrentPage * PAGE_SIZE, total);
+  container.innerHTML += `<span class="page-info">${start}-${end} / 共${total}条</span>`;
+  container.innerHTML += `<button class="page-btn" onclick="gotoPage(1)">«</button>`;
+  container.innerHTML += `<button class="page-btn" onclick="gotoPage(${storeCurrentPage - 1})">‹</button>`;
+  for (let p = Math.max(1, storeCurrentPage - 2); p <= Math.min(totalPages, storeCurrentPage + 2); p++) {
+    container.innerHTML += `<button class="page-btn ${p === storeCurrentPage ? 'active' : ''}" onclick="gotoPage(${p})">${p}</button>`;
+  }
+  container.innerHTML += `<button class="page-btn" onclick="gotoPage(${storeCurrentPage + 1})">›</button>`;
+  container.innerHTML += `<button class="page-btn" onclick="gotoPage(${totalPages})">»</button>`;
+}
+
+function gotoPage(p) {
+  const totalPages = Math.ceil(filteredStoreData.length / PAGE_SIZE);
+  storeCurrentPage = Math.max(1, Math.min(p, totalPages));
+  renderStoreTable();
+}
+
+function sortStoreTable(col, th) {
+  if (storeSortCol === col) storeSortDir *= -1;
+  else { storeSortCol = col; storeSortDir = -1; }
+  document.querySelectorAll('#storeTable th').forEach(t => t.classList.remove('sorted'));
+  th.classList.add('sorted');
+  th.querySelector('.sort-icon').textContent = storeSortDir > 0 ? '↑' : '↓';
+  storeCurrentPage = 1;
+  renderStoreTable();
+}
+
+// ============================================================
+//  EXPORT CSV（更新列结构）
+// ============================================================
+function exportTableCSV() {
+  if (filteredStoreData.length === 0) { showToast('❌ 没有可导出的数据'); return; }
+  const headers = ['门店名称','区经','门店类型','月度目标','5月达成','本月达成','环比','实收金额','售后金额','达成率','状态'];
+  const rows = filteredStoreData.map(s => {
+    const rate = getRate(s.achieved, s.target);
+    const prevA = getPrevAchieved(s);
+    const momRate = prevA !== null ? calcMoM(Math.max(0, s.achieved), prevA) : null;
+    const momStr = momRate !== null ? (momRate >= 0 ? '+' : '') + momRate.toFixed(1) + '%' : '-';
+    return [
+      s.store_name, s.region, s.store_type,
+      s.target,
+      prevA !== null ? prevA.toFixed(2) : '-',
+      s.achieved.toFixed(2),
+      momStr,
+      s.actual_receipt !== null ? (s.actual_receipt || 0).toFixed(2) : '-',
+      s.after_sales !== null ? (s.after_sales || 0).toFixed(2) : '-',
+      rate.toFixed(2)+'%',
+      getStatus(rate, timeProgress)
+    ];
+  });
+  const csv = '\uFEFF' + [headers, ...rows].map(r => r.map(v => `"${v}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `门店业绩_${currentMonth}_${new Date().toLocaleDateString()}.csv`;
+  a.click(); URL.revokeObjectURL(url);
+  showToast('✅ 已导出 ' + filteredStoreData.length + ' 条数据');
+}
+
+// ============================================================
+//  UPDATE TOP BADGE
+// ============================================================
+function updateTopBadge() {
+  document.getElementById('topTimeBadge').textContent =
+    `${currentMonth}${currentDay}日 | 时间进度 ${timeProgress.toFixed(1)}%`;
+}
+
+// ============================================================
+//  HELPERS
+// ============================================================
+function fmtNum(n) {
+  if (n === null || n === undefined) return '—';
+  return Math.round(n).toLocaleString('zh-CN');
+}
+
+// 金额格式化：¥70,850（千分位，无小数，¥紧贴数字）
+function fmtMoney(n) {
+  if (n === null || n === undefined) return '—';
+  return '¥' + Math.round(n).toLocaleString('zh-CN');
+}
+
+// ============================================================
+//  截图复制到剪贴板
+// ============================================================
+async function capturePanel(panelId) {
+  const panel = document.getElementById(panelId);
+  if (!panel) return;
+  const btn = panel.querySelector('.capture-btn');
+  const origText = btn ? btn.textContent : '';
+
+  try {
+    // 截图前临时隐藏按钮，让截图更干净
+    if (btn) btn.style.visibility = 'hidden';
+
+    const canvas = await html2canvas(panel, {
+      backgroundColor: '#f0f2f5',
+      scale: 2,
+      useCORS: true,
+      logging: false,
+    });
+
+    // 恢复按钮
+    if (btn) btn.style.visibility = '';
+
+    // Canvas → Blob → Clipboard
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+
+    try {
+      await navigator.clipboard.write([
+        new ClipboardItem({ 'image/png': blob })
+      ]);
+      // 成功反馈
+      if (btn) {
+        btn.textContent = '✅ 已复制';
+        btn.classList.add('success');
+        setTimeout(() => {
+          btn.textContent = origText || '📷 生成图片';
+          btn.classList.remove('success');
+        }, 2000);
+      }
+      showToast('✅ 图片已复制到剪贴板');
+    } catch (clipErr) {
+      // Clipboard API 失败（如浏览器不支持或未授权）
+      console.error('Clipboard write failed:', clipErr);
+      if (btn) {
+        btn.textContent = '❌ 复制失败';
+        btn.classList.add('error');
+        setTimeout(() => {
+          btn.textContent = origText || '📷 生成图片';
+          btn.classList.remove('error');
+        }, 2000);
+      }
+      showToast('❌ 复制失败，请检查浏览器剪贴板权限');
+    }
+  } catch (err) {
+    console.error('Capture failed:', err);
+    if (btn) {
+      btn.style.visibility = '';
+      btn.textContent = '❌ 复制失败';
+      btn.classList.add('error');
+      setTimeout(() => {
+        btn.textContent = origText || '📷 生成图片';
+        btn.classList.remove('error');
+      }, 2000);
+    }
+    showToast('❌ 截图失败：' + (err.message || '未知错误'));
+  }
+}
+
+let toastTimer = null;
+
+// ============================================================
+//  导购业绩模块 - 全局变量
+// ============================================================
+const LS_GUIDE_KEY = 'mop_guide_data_v1';
+let guideRawData = []; // [{ storeCode, guideName, amount }]
+let guideMapData = {}; // { storeCode: { storeName, region, storeReceipt, guides, guideTotal, diff } }
+let guideSortState = { field: 'amount', dir: 'desc' }; // 导购表格排序状态
+
+// ============================================================
+//  数据类型切换（门店 / 导购）
+// ============================================================
+function switchDataType(type, btn) {
+  document.querySelectorAll('.data-type-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('dataAreaStore').style.display = type === 'store' ? '' : 'none';
+  document.getElementById('dataAreaGuide').style.display = type === 'guide' ? '' : 'none';
+}
+
+// ============================================================
+//  导购数据：文件上传 & 粘贴
+// ============================================================
+function handleGuideFileUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  showToast('⏳ 正在读取导购文件: ' + file.name);
+  console.log('[导购] 选择文件:', file.name, file.size);
+  processGuideFile(file);
+}
+
+function processGuideFile(file) {
+  showToast('⏳ 正在解析导购数据...');
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const data = new Uint8Array(e.target.result);
+      const wb = XLSX.read(data, { type: 'array' });
+      const sheetName = wb.SheetNames[0];
+      const ws = wb.Sheets[sheetName];
+      const json = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
+      console.log('[导购] 解析到行数:', json.length, '前5行预览:', json.slice(0, 5));
+      parseGuideRows(json);
+    } catch(err) {
+      console.error('[导购] 文件解析异常:', err);
+      showToast('❌ 导购文件解析失败：' + err.message);
+    }
+  };
+  reader.onerror = function() {
+    showToast('❌ 文件读取失败，请重试');
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function parseGuidePasteData() {
+  const raw = document.getElementById('guidePasteArea').value.trim();
+  if (!raw) { showToast('❌ 请先粘贴导购数据'); return; }
+  const rows = raw.split('\n').map(r => r.split('\t'));
+  parseGuideRows(rows);
+}
+
+// ============================================================
+//  导购透视表解析核心逻辑
+// ============================================================
+function parseGuideRows(rows) {
+  const guides = [];
+  let currentStoreCode = null;
+
+  console.log('[导购] 开始解析，总行数:', rows.length);
+
+  // 找表头行（含"导购"、"编号"等关键词），之后从下一行开始读
+  let startRow = 0;
+  for (let i = 0; i < Math.min(rows.length, 10); i++) {
+    const r = rows[i].map(v => String(v || ''));
+    if (r.some(v => v.includes('导购') || v.includes('编号') || v.includes('实收') || v.includes('求和'))) {
+      startRow = i + 1;
+      console.log('[导购] 找到表头行:', i, rows[i]);
+      break;
+    }
+  }
+
+  // 逐行解析
+  let skippedRows = [];
+  for (let i = startRow; i < rows.length; i++) {
+    const row = rows[i];
+
+    // 跳过全空行和总计行
+    const rowText = row.map(v => String(v || '')).join('');
+    if (!rowText.trim()) continue;
+    if (rowText.includes('总计') && !rowText.includes('导购')) continue;
+
+    // 实际Excel格式：col[0]=null, col[1]=门店编号, col[2]=导购名, col[3]=金额
+    // 兼容3列格式：col[0]=门店编号, col[1]=导购名, col[2]=金额
+    let storeCode = '', guideName = '', amount = 0;
+
+    if (row.length >= 4) {
+      storeCode  = String(row[1] || '').trim();
+      guideName  = String(row[2] || '').trim();
+      amount     = parseFloat(row[3]) || 0;
+    } else if (row.length >= 3) {
+      storeCode  = String(row[0] || '').trim();
+      guideName  = String(row[1] || '').trim();
+      amount     = parseFloat(row[2]) || 0;
+    } else { continue; }
+
+    storeCode = storeCode.replace(/□/g, '').trim();
+
+    // 门店编号行：有编号，以95或9X开头
+    if (storeCode && (storeCode.startsWith('95') || /^9\d/.test(storeCode))) {
+      currentStoreCode = storeCode;
+    }
+    // 导购行：无编号，有姓名
+    else if (!storeCode && guideName && guideName !== '总计' && guideName !== '求和项:实收金额' && currentStoreCode) {
+      guides.push({ storeCode: currentStoreCode, guideName, amount });
+    }
+    // 无法识别的行，记录日志
+    else {
+      if (storeCode || guideName) {
+        skippedRows.push({ rowIdx: i, storeCode, guideName, amount });
+      }
+    }
+  }
+
+  if (skippedRows.length > 0) {
+    console.warn('[导购] 跳过的行:', skippedRows.slice(0, 10));
+  }
+
+  if (guides.length === 0) {
+    console.error('[导购] 未解析到任何导购数据。前10行原始数据:', rows.slice(0, 10));
+    showToast('❌ 未解析到导购数据，请检查格式（需包含95开头的门店编号行+导购姓名行）');
+    return;
+  }
+
+  guideRawData = guides;
+  saveGuideToStorage();
+  buildGuideMap();
+  renderGuideSection();
+  showToast(`✅ 导购数据导入成功！共 ${guides.length} 条记录，涉及 ${Object.keys(guideMapData).length} 家门店`);
+  document.getElementById('dataPanel').removeAttribute('open');
+}
+
+// ============================================================
+//  构建 guideMapData（关联门店数据，计算差异）
+// ============================================================
+function buildGuideMap() {
+  guideMapData = {};
+  for (const g of guideRawData) {
+    const sc = g.storeCode;
+    if (!guideMapData[sc]) {
+      const storeInfo = storeData.find(s => s.store_no === sc);
+      // 门店对账基准：优先用"本月达成"(achieved)，因为它与导购业绩口径一致
+      const receipt = storeInfo ? (storeInfo.achieved || 0) : 0;
+      guideMapData[sc] = {
+        storeCode: sc,
+        storeName: storeInfo ? storeInfo.store_name : sc,
+        region: storeInfo ? storeInfo.region : '未知',
+        storeReceipt: receipt,
+        guides: [],
+        guideTotal: 0,
+      };
+    }
+    guideMapData[sc].guides.push({ name: g.guideName, amount: g.amount, isDiff: false });
+    guideMapData[sc].guideTotal = Math.round((guideMapData[sc].guideTotal + g.amount) * 100) / 100;
+  }
+  // 计算差额，如差额 ≠ 0 添加"无归属导购"
+  for (const sc in guideMapData) {
+    const store = guideMapData[sc];
+    const diff = Math.round((store.storeReceipt - store.guideTotal) * 100) / 100;
+    if (Math.abs(diff) >= 0.01) {
+      store.guides.push({ name: '无归属导购', amount: diff, isDiff: true });
+    }
+    store.diff = diff;
+  }
+}
+
+// ============================================================
+//  导购数据存储
+// ============================================================
+function saveGuideToStorage() {
+  try { localStorage.setItem(LS_GUIDE_KEY, JSON.stringify(guideRawData)); } catch(e) {}
+}
+
+function loadGuideFromStorage() {
+  try {
+    const raw = localStorage.getItem(LS_GUIDE_KEY);
+    if (raw) {
+      guideRawData = JSON.parse(raw);
+      buildGuideMap();
+      renderGuideSection();
+    }
+  } catch(e) {}
+}
+
+function clearGuideData() {
+  guideRawData = [];
+  guideMapData = {};
+  localStorage.removeItem(LS_GUIDE_KEY);
+  renderGuideSection();
+  showToast('✅ 导购数据已清空');
+}
+
+// ============================================================
+//  渲染对账面板
+// ============================================================
+function renderAuditPanel() {
+  if (Object.keys(guideMapData).length === 0) return;
+  const stores = Object.values(guideMapData);
+  const total = stores.length;
+  const diffStores = stores.filter(s => Math.abs(s.diff) >= 0.01);
+  const noDiff = total - diffStores.length;
+  const totalDiffAmt = diffStores.reduce((sum, s) => sum + Math.abs(s.diff), 0);
+
+  const okClass = diffStores.length === 0 ? 'ok' : 'warn';
+  document.getElementById('auditKpisRow').innerHTML = `
+    <div class="audit-kpi-item"><span class="ak-label">已对账门店：</span><span class="ak-val ${okClass}">${noDiff}/${total} ${diffStores.length===0?'✅':''}</span></div>
+    <div class="audit-kpi-item"><span class="ak-label">差异门店：</span><span class="ak-val ${diffStores.length>0?'warn':'ok'}">${diffStores.length}</span></div>
+    <div class="audit-kpi-item"><span class="ak-label">总差异金额：</span><span class="ak-val ${totalDiffAmt>0?'warn':'ok'}">${fmtMoney(totalDiffAmt)}</span></div>`;
+
+  const allStores = [...stores].sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
+  let rows = '';
+  for (const s of allStores) {
+    const hasDiff = Math.abs(s.diff) >= 0.01;
+    const diffSign = s.diff > 0 ? '+' : '';
+    const diffCls = s.diff > 0 ? 'audit-diff-pos' : s.diff < 0 ? 'audit-diff-neg' : 'audit-diff-zero';
+    rows += `<tr class="${hasDiff ? 'has-diff' : ''}">
+      <td>${s.storeCode}</td><td>${s.storeName}</td>
+      <td style="text-align:right">${fmtMoney(s.storeReceipt)}</td>
+      <td style="text-align:right">${fmtMoney(s.guideTotal)}</td>
+      <td style="text-align:right"><span class="${diffCls}">${diffSign}${fmtMoney(s.diff)}</span></td>
+      <td>${hasDiff ? '<span style="color:var(--orange)">⚠️ 有差异</span>' : '<span style="color:var(--green)">✅ 对账一致</span>'}</td>
+    </tr>`;
+  }
+  document.getElementById('auditTableWrap').innerHTML = `
+    <table class="audit-table">
+      <thead><tr><th>门店编号</th><th>门店名称</th><th style="text-align:right">门店业绩</th><th style="text-align:right">导购总和</th><th style="text-align:right">差异金额</th><th>状态</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+// ============================================================
+//  渲染导购列表主体
+// ============================================================
+function renderGuideSection() {
+  if (guideRawData.length > 0) buildGuideMap();
+  renderAuditPanel();
+  renderGuideFilters();
+  renderGuideTable();
+}
+
+function renderGuideFilters() {
+  const regions = [...new Set(Object.values(guideMapData).map(s => s.region).filter(Boolean))].sort();
+  const rf = document.getElementById('guideRegionFilter');
+  const curR = rf.value;
+  rf.innerHTML = '<option value="">全部区域</option>';
+  regions.forEach(r => rf.innerHTML += `<option value="${r}" ${r===curR?'selected':''}>${r}</option>`);
+
+  updateGuideStoreFilter(curR);
+}
+
+function updateGuideStoreFilter(regionVal) {
+  const sf = document.getElementById('guideStoreFilter');
+  const curS = sf.value;
+  sf.innerHTML = '<option value="">全部门店</option>';
+  Object.values(guideMapData).forEach(s => {
+    if (regionVal && s.region !== regionVal) return;
+    sf.innerHTML += `<option value="${s.storeCode}" ${s.storeCode===curS?'selected':''}>${s.storeName}</option>`;
+  });
+  // 如果当前选中的门店不在新区域下，清空门店筛选
+  if (curS) {
+    const storeStillVisible = Object.values(guideMapData).some(s => s.storeCode === curS && (!regionVal || s.region === regionVal));
+    if (!storeStillVisible) sf.value = '';
+  }
+}
+
+function onGuideRegionChange() {
+  const regionVal = document.getElementById('guideRegionFilter').value;
+  updateGuideStoreFilter(regionVal);
+  renderGuideTable();
+}
+
+function renderGuideTable() {
+  const wrap = document.getElementById('guideTableWrap');
+  if (Object.keys(guideMapData).length === 0) {
+    wrap.innerHTML = `<div class="guide-empty">📭 暂无导购数据<br><span style="font-size:12px;margin-top:8px;display:block">请在上方数据导入区选择"👤 导购个人业绩"并上传文件</span></div>`;
+    document.getElementById('guideTotalBadge').textContent = '';
+    return;
+  }
+
+  const searchVal = (document.getElementById('guideSearch').value || '').trim().toLowerCase();
+  const regionVal = document.getElementById('guideRegionFilter').value;
+  const storeVal  = document.getElementById('guideStoreFilter').value;
+  const sortVal   = document.getElementById('guideSortSelect').value;
+
+  let rows = [];
+  for (const sc in guideMapData) {
+    const store = guideMapData[sc];
+    if (regionVal && store.region !== regionVal) continue;
+    if (storeVal && store.storeCode !== storeVal) continue;
+
+    const filteredGuides = store.guides.filter(g => {
+      if (g.isDiff) return !searchVal;
+      return !searchVal || g.name.toLowerCase().includes(searchVal);
+    });
+    if (filteredGuides.length === 0) continue;
+
+    const regularSorted = filteredGuides.filter(g => !g.isDiff).sort((a,b) => b.amount - a.amount);
+    regularSorted.forEach((g, i) => { g._rank = i + 1; });
+
+    filteredGuides.forEach(g => {
+      rows.push({
+        storeCode: store.storeCode, storeName: store.storeName,
+        region: store.region, storeReceipt: store.storeReceipt,
+        guideName: g.name, amount: g.amount, isDiff: g.isDiff,
+        rank: g._rank || 0, guideTotal: store.guideTotal,
+      });
+    });
+  }
+
+  if (rows.length === 0) {
+    wrap.innerHTML = `<div class="guide-empty">🔍 没有符合筛选条件的导购记录</div>`;
+    document.getElementById('guideTotalBadge').textContent = '';
+    return;
+  }
+
+  // 应用排序（支持表头点击排序 + 下拉排序兼容）
+  let field = guideSortState.field;
+  let dir = guideSortState.dir;
+
+  // 下拉选择优先
+  if (sortVal === 'amount_desc') { field = 'amount'; dir = 'desc'; }
+  else if (sortVal === 'amount_asc') { field = 'amount'; dir = 'asc'; }
+  else if (sortVal === 'store') { field = 'store'; dir = 'asc'; }
+
+  if (field === 'store') {
+    rows.sort((a,b) => {
+      if (a.storeCode !== b.storeCode) return a.storeCode.localeCompare(b.storeCode);
+      if (a.isDiff) return 1; if (b.isDiff) return -1;
+      return b.amount - a.amount;
+    });
+  } else if (field === 'amount') {
+    rows.sort((a,b) => dir === 'asc' ? a.amount - b.amount : b.amount - a.amount);
+  } else if (field === 'guideName') {
+    rows.sort((a,b) => {
+      const cmp = a.guideName.localeCompare(b.guideName, 'zh');
+      return dir === 'asc' ? cmp : -cmp;
+    });
+  } else if (field === 'storeName') {
+    rows.sort((a,b) => {
+      const cmp = a.storeName.localeCompare(b.storeName, 'zh');
+      if (cmp !== 0) return dir === 'asc' ? cmp : -cmp;
+      return dir === 'asc' ? a.amount - b.amount : b.amount - a.amount;
+    });
+  } else if (field === 'region') {
+    rows.sort((a,b) => {
+      const cmp = a.region.localeCompare(b.region, 'zh');
+      if (cmp !== 0) return dir === 'asc' ? cmp : -cmp;
+      return dir === 'asc' ? a.amount - b.amount : b.amount - a.amount;
+    });
+  } else if (field === 'ratio') {
+    rows.sort((a,b) => {
+      const ra = a.storeReceipt ? Math.abs(a.amount / a.storeReceipt) : 0;
+      const rb = b.storeReceipt ? Math.abs(b.amount / b.storeReceipt) : 0;
+      return dir === 'asc' ? ra - rb : rb - ra;
+    });
+  }
+
+  const regularRows = rows.filter(r => !r.isDiff);
+  const totalAmount = regularRows.reduce((s, r) => s + r.amount, 0);
+  document.getElementById('guideTotalBadge').textContent = `共 ${regularRows.length} 位导购 · 实收合计 ${fmtMoney(totalAmount)}`;
+
+  wrap.innerHTML = sortVal === 'store' ? renderGuideGrouped(rows) : renderGuideFlatTable(rows);
+}
+
+function sortGuideTable(field) {
+  if (guideSortState.field === field) {
+    guideSortState.dir = guideSortState.dir === 'asc' ? 'desc' : 'asc';
+  } else {
+    guideSortState.field = field;
+    guideSortState.dir = 'desc'; // 默认高→低
+  }
+  // 同步更新下拉框（如果不是amount，则清空下拉框的选中）
+  const sel = document.getElementById('guideSortSelect');
+  if (field === 'amount' && guideSortState.dir === 'desc') sel.value = 'amount_desc';
+  else if (field === 'amount' && guideSortState.dir === 'asc') sel.value = 'amount_asc';
+  else if (field === 'store') sel.value = 'store';
+  else sel.value = '';
+  renderGuideTable();
+}
+
+function guideSortIcon(field) {
+  if (guideSortState.field !== field) return '<span class="sort-icon">↕</span>';
+  return guideSortState.dir === 'asc' ? '<span class="sort-icon" style="color:var(--blue)">↑</span>' : '<span class="sort-icon" style="color:var(--blue)">↓</span>';
+}
+
+function guideAmountCell(amount) {
+  const cls = amount > 0 ? 'guide-amount-pos' : amount < 0 ? 'guide-amount-neg' : 'guide-amount-zero';
+  return `<span class="${cls}">${fmtMoney(amount)}</span>`;
+}
+
+function guideRatioHtml(amount, storeReceipt, isDiff) {
+  if (isDiff) return '<span style="color:var(--text-muted);font-size:11px">差额</span>';
+  const ratioVal = storeReceipt !== 0 ? Math.abs(amount / storeReceipt) : 0;
+  const barW = Math.min(100, Math.round(ratioVal * 100));
+  return `<div class="guide-ratio-wrap"><div class="guide-ratio-bar"><div class="guide-ratio-fill" style="width:${barW}%"></div></div><span class="guide-ratio-text">${(ratioVal*100).toFixed(1)}%</span></div>`;
+}
+
+function guideRankBadge(rank, isDiff) {
+  if (isDiff) return '<span class="guide-rank" title="差额行">±</span>';
+  return `<span class="guide-rank ${rank===1?'r1':rank===2?'r2':rank===3?'r3':''}">${rank}</span>`;
+}
+
+// 平铺表格
+function renderGuideFlatTable(rows) {
+  const thBase = 'background:#f8fafc;color:var(--text-muted);padding:10px 12px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap;cursor:pointer;user-select:none';
+  let html = `<table style="width:100%;border-collapse:collapse;font-size:13px">
+    <thead><tr>
+      <th style="${thBase};width:50px" onclick="sortGuideTable('amount')">排名 ${guideSortIcon('amount')}</th>
+      <th style="${thBase}" onclick="sortGuideTable('guideName')">导购名称 ${guideSortIcon('guideName')}</th>
+      <th style="${thBase}" onclick="sortGuideTable('storeName')">所属门店 ${guideSortIcon('storeName')}</th>
+      <th style="${thBase}" onclick="sortGuideTable('region')">区域 ${guideSortIcon('region')}</th>
+      <th style="${thBase};text-align:right" onclick="sortGuideTable('amount')">实收金额 ${guideSortIcon('amount')}</th>
+      <th style="${thBase};min-width:120px" onclick="sortGuideTable('ratio')">门店占比 ${guideSortIcon('ratio')}</th>
+    </tr></thead><tbody>`;
+
+  rows.forEach((r, i) => {
+    const rowCls = r.isDiff ? 'guide-no-attr-row' : '';
+    const nameCell = r.isDiff ? '<span style="color:var(--orange)">⚠ 无归属导购</span>' : r.guideName;
+    html += `<tr class="${rowCls}">
+      <td style="padding:8px 12px;border-bottom:1px solid #f1f5f9">${guideRankBadge(i+1, r.isDiff)}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;font-weight:${r.isDiff?'400':'500'}">${nameCell}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;color:var(--text-muted)">${r.storeName}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;color:var(--text-muted)">${r.region}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;text-align:right">${guideAmountCell(r.amount)}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #f1f5f9">${guideRatioHtml(r.amount, r.storeReceipt, r.isDiff)}</td>
+    </tr>`;
+  });
+  return html + '</tbody></table>';
+}
+
+// 分组表格
+function renderGuideGrouped(rows) {
+  const groups = {};
+  rows.forEach(r => {
+    if (!groups[r.storeCode]) groups[r.storeCode] = { storeName: r.storeName, region: r.region, storeReceipt: r.storeReceipt, rows: [] };
+    groups[r.storeCode].rows.push(r);
+  });
+
+  const thStyle = 'background:#f8fafc;color:var(--text-muted);padding:10px 12px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap';
+  let html = `<table style="width:100%;border-collapse:collapse;font-size:13px">
+    <thead><tr>
+      <th style="${thStyle};width:50px"></th>
+      <th style="${thStyle}">导购名称</th>
+      <th style="${thStyle}">区域</th>
+      <th style="${thStyle};text-align:right">实收金额</th>
+      <th style="${thStyle};min-width:120px">门店占比</th>
+    </tr></thead><tbody>`;
+
+  let storeIdx = 0;
+  for (const sc in groups) {
+    const grp = groups[sc];
+    const guideCount = grp.rows.filter(r => !r.isDiff).length;
+    const sid = `guide-grp-${storeIdx++}`;
+    html += `<tr class="guide-store-row" onclick="toggleGuideGroup('${sid}')">
+      <td colspan="2" style="padding:10px 12px;border-bottom:1px solid var(--border)">
+        <span class="guide-store-toggle open" id="${sid}-toggle" style="transform:rotate(90deg)">▶</span>
+        <strong>${grp.storeName}</strong>
+        <span style="color:var(--text-muted);font-size:11px;margin-left:8px">${guideCount} 人</span>
+      </td>
+      <td style="padding:10px 12px;border-bottom:1px solid var(--border);color:var(--text-muted)">${grp.region}</td>
+      <td style="padding:10px 12px;border-bottom:1px solid var(--border);text-align:right;font-weight:700">${fmtMoney(grp.storeReceipt)}</td>
+      <td style="padding:10px 12px;border-bottom:1px solid var(--border)"></td>
+    </tr>`;
+
+    const sortedGuides = [...grp.rows].sort((a,b) => a.isDiff?1:b.isDiff?-1:b.amount-a.amount);
+    sortedGuides.forEach((r, rank) => {
+      const rowCls = r.isDiff ? 'guide-no-attr-row' : 'guide-detail-row';
+      const nameCell = r.isDiff ? '<span style="color:var(--orange)">⚠ 无归属导购</span>' : r.guideName;
+      html += `<tr class="${rowCls}" data-group="${sid}">
+        <td style="padding:8px 12px 8px 28px;border-bottom:1px solid #f1f5f9">${guideRankBadge(rank+1, r.isDiff)}</td>
+        <td style="padding:8px 12px 8px 12px;border-bottom:1px solid #f1f5f9;font-weight:${r.isDiff?'400':'500'}">${nameCell}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;color:var(--text-muted)">${r.region}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;text-align:right">${guideAmountCell(r.amount)}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #f1f5f9">${guideRatioHtml(r.amount, r.storeReceipt, r.isDiff)}</td>
+      </tr>`;
+    });
+  }
+  return html + '</tbody></table>';
+}
+
+function toggleGuideGroup(sid) {
+  const toggle = document.getElementById(sid + '-toggle');
+  const rows = document.querySelectorAll(`[data-group="${sid}"]`);
+  const isOpen = toggle.style.transform === 'rotate(90deg)';
+  toggle.style.transform = isOpen ? '' : 'rotate(90deg)';
+  rows.forEach(r => r.style.display = isOpen ? 'none' : '');
+}
+
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.add('show');
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+</script>
+</body>
+</html>
