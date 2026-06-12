@@ -1026,7 +1026,7 @@ function calcTimeProgress() {
 function saveToStorage() {
   try {
     localStorage.setItem(LS_KEY, JSON.stringify(storeData));
-    localStorage.setItem(LS_META_KEY, JSON.stringify({ updatedAt: new Date().toISOString() }));
+    localStorage.setItem(LS_META_KEY, JSON.stringify({ updatedAt: new Date().toISOString(), version: 'v2.2' }));
   } catch(e) { showToast('⚠️ 存储空间不足，数据未保存'); }
 }
 
