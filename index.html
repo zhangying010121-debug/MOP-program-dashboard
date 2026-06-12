@@ -483,10 +483,6 @@ tr:last-child td { border-bottom: none; }
 </head>
 <body>
 
-<!-- 调试面板（8秒后自动隐藏，点击可关闭）-->
-<div id="debugBanner" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:#f0fdf4;border-bottom:2px solid #86efac;padding:8px 16px;font-family:monospace;max-height:40vh;overflow-y:auto;cursor:pointer;" onclick="this.style.display='none'">
-  <div style="font-size:13px;font-weight:700;margin-bottom:4px;">🔧 调试日志（点击关闭）</div>
-</div>
 <div class="top-bar">
   <h1>🏪 小程序月度业绩 <span>达成看板</span> <small style="font-size:11px;color:#999;font-weight:400;margin-left:6px;">v2.3-截至6.11</small></h1>
   <div class="top-bar-right">
@@ -975,45 +971,25 @@ function renderKpiMoM(rate) {
 // 全局错误捕获 - 可视化显示
 window.onerror = function(msg, src, line, col, err) {
   console.error('全局错误:', msg, src, line);
-  const dbg = document.getElementById('debugBanner');
-  if (dbg) dbg.innerHTML += '<div style="background:#fee2e2;padding:6px 12px;margin:2px 0;border-left:3px solid #dc2626;font-size:12px;">❌ ' + msg + ' (行' + line + ')</div>';
   return false;
 };
 window.addEventListener('unhandledrejection', function(e) {
   console.error('未捕获Promise:', e.reason);
-  const dbg = document.getElementById('debugBanner');
-  if (dbg) dbg.innerHTML += '<div style="background:#fef3c7;padding:6px 12px;margin:2px 0;border-left:3px solid #d97706;font-size:12px;">⚠️ Promise错误: ' + e.reason + '</div>';
 });
 
 window.addEventListener('DOMContentLoaded', () => {
-  const dbg = document.getElementById('debugBanner');
-  try {
-    calcTimeProgress();
-    if(dbg) dbg.innerHTML += '<div style="color:#16a34a;font-size:12px;">✅ calcTimeProgress OK</div>';
-  } catch(e) { if(dbg) dbg.innerHTML += '<div style="color:#dc2626;font-size:12px;">❌ calcTimeProgress: '+e.message+'</div>'; }
-  try {
-    updateTopBadge();
-    if(dbg) dbg.innerHTML += '<div style="color:#16a34a;font-size:12px;">✅ updateTopBadge OK</div>';
-  } catch(e) { if(dbg) dbg.innerHTML += '<div style="color:#dc2626;font-size:12px;">❌ updateTopBadge: '+e.message+'</div>'; }
-  try {
-    loadFromStorage();
-    if(dbg) dbg.innerHTML += '<div style="color:#16a34a;font-size:12px;">✅ loadFromStorage OK</div>';
-  } catch(e) { if(dbg) dbg.innerHTML += '<div style="color:#dc2626;font-size:12px;">❌ loadFromStorage: '+e.message+'</div>'; }
-  try {
-    setupDragDrop();
-    if(dbg) dbg.innerHTML += '<div style="color:#16a34a;font-size:12px;">✅ setupDragDrop OK</div>';
-  } catch(e) { if(dbg) dbg.innerHTML += '<div style="color:#dc2626;font-size:12px;">❌ setupDragDrop: '+e.message+'</div>'; }
+  try { calcTimeProgress(); } catch(e) { console.error('calcTimeProgress:', e); }
+  try { updateTopBadge(); } catch(e) { console.error('updateTopBadge:', e); }
+  try { loadFromStorage(); } catch(e) { console.error('loadFromStorage:', e); loadSampleData(); }
+  try { setupDragDrop(); } catch(e) { console.error('setupDragDrop:', e); }
   // 用 addEventListener 绑定文件上传（比内联 onchange 更可靠）
   try {
     const fi = document.getElementById('fileInput');
     if (fi) fi.addEventListener('change', handleFileUpload);
     const gi = document.getElementById('guideFileInput');
     if (gi) gi.addEventListener('change', handleGuideFileUpload);
-    if(dbg) dbg.innerHTML += '<div style="color:#16a34a;font-size:12px;">✅ 文件上传事件绑定OK</div>';
-  } catch(e) { if(dbg) dbg.innerHTML += '<div style="color:#dc2626;font-size:12px;">❌ 事件绑定失败: '+e.message+'</div>'; }
+  } catch(e) { console.error('事件绑定失败:', e); }
   setInterval(() => { calcTimeProgress(); updateTopBadge(); refreshAll(); }, 60000);
-  // 调试面板不自动隐藏（手动点击关闭）
-  // setTimeout(() => { const d=document.getElementById('debugBanner'); if(d) d.style.display='none'; }, 8000);
 });
 
 // ============================================================
@@ -1068,8 +1044,8 @@ function loadFromStorage() {
     const meta = localStorage.getItem(LS_META_KEY);
     if (meta) {
       const m = JSON.parse(meta);
-      // 如果之前存过数据，清除后重新加载（确保用最新数据）
-      if (!m.version || m.version !== 'v2.2') {
+      // 如果版本号不匹配当前版本，清除旧数据（避免格式不兼容）
+      if (!m.version || m.version !== 'v2.3') {
         localStorage.removeItem(LS_KEY);
         localStorage.removeItem(LS_GUIDE_KEY);
       }
@@ -1077,15 +1053,20 @@ function loadFromStorage() {
   } catch(e) {}
   try {
     const raw = localStorage.getItem(LS_KEY);
-    if (raw) {
-      storeData = JSON.parse(raw);
-      storeData.forEach(s => { if (!s.region || s.region.trim() === '') s.region = DEFAULT_REGION; });
-      refreshAll();
+    if (raw && raw !== 'null' && raw !== 'undefined') {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        storeData = parsed;
+        storeData.forEach(s => { if (!s.region || s.region.trim() === '') s.region = DEFAULT_REGION; });
+        refreshAll();
+      } else {
+        loadSampleData();
+      }
     } else {
       loadSampleData();
     }
   } catch(e) { loadSampleData(); }
-  // 恢复导购数据（优先localStorage，否则预置6.9导购数据）
+  // 恢复导购数据（优先localStorage，否则预置导购数据）
   loadGuideFromStorage();
   if (!guideRawData || guideRawData.length === 0) {
     loadPresetGuideData();
@@ -1166,11 +1147,10 @@ function loadSampleData() {
 //  FILE UPLOAD
 // ============================================================
 function setupDragDrop() {
-  const dbg = document.getElementById('debugBanner');
   // 门店上传区
   const zone = document.getElementById('uploadZone');
   if (!zone) {
-    if(dbg) dbg.innerHTML += '<div style="color:#dc2626;font-size:12px;">❌ uploadZone 元素不存在！</div>';
+    console.error('uploadZone 元素不存在');
     return;
   }
   zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
@@ -1183,7 +1163,7 @@ function setupDragDrop() {
   // 导购上传区
   const guideZone = document.getElementById('guideUploadZone');
   if (!guideZone) {
-    if(dbg) dbg.innerHTML += '<div style="color:#d97706;font-size:12px;">⚠️ guideUploadZone 元素不存在</div>';
+    console.warn('guideUploadZone 元素不存在');
   } else {
     guideZone.addEventListener('dragover', e => { e.preventDefault(); guideZone.classList.add('drag-over'); });
     guideZone.addEventListener('dragleave', () => guideZone.classList.remove('drag-over'));
@@ -1192,7 +1172,6 @@ function setupDragDrop() {
       const file = e.dataTransfer.files[0];
       if (file) processGuideFile(file);
     });
-    if(dbg) dbg.innerHTML += '<div style="color:#16a34a;font-size:12px;">✅ guideUploadZone 绑定OK</div>';
   }
 }
 
