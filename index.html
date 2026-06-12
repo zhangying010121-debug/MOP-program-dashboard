@@ -42,6 +42,15 @@ body { background: var(--bg); color: var(--text); font-family: -apple-system, 'P
   border-radius: 20px; padding: 6px 16px; font-size: 13px; color: var(--blue);
   font-weight: 500;
 }
+.top-bar-right { display: flex; align-items: center; gap: 10px; }
+.save-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: #16a34a; color: #fff; border: none; border-radius: 8px;
+  padding: 7px 16px; font-size: 13px; font-weight: 600; cursor: pointer;
+  box-shadow: 0 1px 4px rgba(22,163,74,.3); transition: background .15s;
+}
+.save-btn:hover { background: #15803d; }
+.save-btn:active { transform: scale(.97); }
 
 /* ===== MAIN LAYOUT ===== */
 .container { max-width: 1440px; margin: 0 auto; padding: 20px 24px; }
@@ -480,7 +489,10 @@ tr:last-child td { border-bottom: none; }
 </div>
 <div class="top-bar">
   <h1>🏪 小程序月度业绩 <span>达成看板</span> <small style="font-size:11px;color:#999;font-weight:400;margin-left:6px;">v2.2-截至6.9</small></h1>
-  <div id="topTimeBadge" class="time-badge">加载中...</div>
+  <div class="top-bar-right">
+    <button class="save-btn" onclick="saveAll()" title="将当前所有数据强制保存到本地，下次打开自动恢复">💾 更新保存</button>
+    <div id="topTimeBadge" class="time-badge">加载中...</div>
+  </div>
 </div>
 
 <!-- TOAST -->
@@ -1028,6 +1040,25 @@ function saveToStorage() {
     localStorage.setItem(LS_KEY, JSON.stringify(storeData));
     localStorage.setItem(LS_META_KEY, JSON.stringify({ updatedAt: new Date().toISOString(), version: 'v2.2' }));
   } catch(e) { showToast('⚠️ 存储空间不足，数据未保存'); }
+}
+
+// 手动"更新保存"按钮：强制保存门店+导购全部数据
+function saveAll() {
+  let storeCount = storeData ? storeData.length : 0;
+  let guideCount = guideRawData ? guideRawData.length : 0;
+  if (storeCount === 0) { showToast('⚠️ 当前没有门店数据，请先导入'); return; }
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify(storeData));
+    localStorage.setItem(LS_META_KEY, JSON.stringify({ updatedAt: new Date().toISOString(), version: 'v2.2' }));
+    if (guideCount > 0) {
+      localStorage.setItem(LS_GUIDE_KEY, JSON.stringify(guideRawData));
+    }
+    const now = new Date();
+    const ts = `${now.getMonth()+1}/${now.getDate()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+    showToast(`✅ 已保存！门店 ${storeCount} 家，导购 ${guideCount} 条（${ts}）`);
+  } catch(e) {
+    showToast('❌ 保存失败：' + (e.message || '存储空间不足'));
+  }
 }
 
 function loadFromStorage() {
