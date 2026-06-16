@@ -1048,6 +1048,7 @@ function loadFromStorage() {
       if (!m.version || m.version !== 'v2.3') {
         localStorage.removeItem(LS_KEY);
         localStorage.removeItem(LS_GUIDE_KEY);
+        showToast('ℹ️ 检测到数据版本更新(v2.3)，已清除旧版localStorage数据');
       }
     }
   } catch(e) {}
@@ -1059,13 +1060,19 @@ function loadFromStorage() {
         storeData = parsed;
         storeData.forEach(s => { if (!s.region || s.region.trim() === '') s.region = DEFAULT_REGION; });
         refreshAll();
+        showToast(`📂 已从本地恢复数据：${storeData.length} 家门店`);
       } else {
         loadSampleData();
+        showToast('⚠️ 本地数据为空，已加载内置示例数据');
       }
     } else {
       loadSampleData();
+      showToast('⚠️ 未检测到本地数据，已加载内置示例数据（请点"更新保存"保存您的数据）');
     }
-  } catch(e) { loadSampleData(); }
+  } catch(e) {
+    showToast('❌ 本地数据解析失败，已加载内置示例数据');
+    loadSampleData();
+  }
   // 恢复导购数据（优先localStorage，否则预置导购数据）
   loadGuideFromStorage();
   if (!guideRawData || guideRawData.length === 0) {
