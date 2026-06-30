@@ -484,7 +484,7 @@ tr:last-child td { border-bottom: none; }
 <body>
 
 <div class="top-bar">
-  <h1>🏪 小程序月度业绩 <span>达成看板</span> <small style="font-size:11px;color:#999;font-weight:400;margin-left:6px;">v2.7-截至6.28</small></h1>
+  <h1>🏪 小程序月度业绩 <span>达成看板</span> <small style="font-size:11px;color:#999;font-weight:400;margin-left:6px;">v2.8-截至6.29</small></h1>
   <div class="top-bar-right">
     <button class="save-btn" onclick="saveAll()" title="将当前所有数据强制保存到本地，下次打开自动恢复">💾 更新保存</button>
     <div id="topTimeBadge" class="time-badge">加载中...</div>
@@ -535,10 +535,10 @@ tr:last-child td { border-bottom: none; }
             <code>门店编号</code> <code>门店名称</code> <code>正价/奥莱</code> <code>区经</code> <code>6月目标</code> <code>6月达成</code>
             可选列（有则自动读取）：<code>实收金额</code> <code>售后金额</code>
           </p>
-          <p style="margin-top:6px;">💡 当前已预载截至6.28的最新数据，上传新文件即可自动覆盖更新。</p>
+          <p style="margin-top:6px;">💡 当前已预载截至6.29的最新数据，上传新文件即可自动覆盖更新。</p>
         </div>
         <div style="margin-top:12px;display:flex;gap:8px;">
-          <button class="btn btn-green" onclick="loadSampleData()">📊 载入截至6.28最新数据</button>
+          <button class="btn btn-green" onclick="loadSampleData()">📊 载入截至6.29最新数据</button>
           <button class="btn btn-danger" onclick="confirmClearData()">🗑 清空所有数据</button>
         </div>
       </div>
@@ -973,7 +973,7 @@ window.addEventListener('unhandledrejection', function(e) {
 window.addEventListener('DOMContentLoaded', () => {
   try { calcTimeProgress(); } catch(e) { console.error('calcTimeProgress:', e); }
   try { updateTopBadge(); } catch(e) { console.error('updateTopBadge:', e); }
-  // v2.7 修复：优先加载内置数据确保首屏有内容，再尝试用localStorage覆盖（用户手动导入的新数据）
+  // v2.8 修复：优先加载内置数据确保首屏有内容，再尝试用localStorage覆盖（用户手动导入的新数据）
   try { loadSampleData(); } catch(e) { console.error('loadSampleData:', e); }
   try { loadPresetGuideData(); } catch(e) { console.error('loadPresetGuideData:', e); }
   try { restoreFromLocalStorage(); } catch(e) { console.error('restoreFromLocalStorage:', e); }
@@ -1010,7 +1010,7 @@ function calcTimeProgress() {
 function saveToStorage() {
   try {
     localStorage.setItem(LS_KEY, JSON.stringify(storeData));
-    localStorage.setItem(LS_META_KEY, JSON.stringify({ updatedAt: new Date().toISOString(), version: 'v2.7' }));
+    localStorage.setItem(LS_META_KEY, JSON.stringify({ updatedAt: new Date().toISOString(), version: 'v2.8' }));
   } catch(e) { showToast('⚠️ 存储空间不足，数据未保存'); }
 }
 
@@ -1021,7 +1021,7 @@ function saveAll() {
   if (storeCount === 0) { showToast('⚠️ 当前没有门店数据，请先导入'); return; }
   try {
     localStorage.setItem(LS_KEY, JSON.stringify(storeData));
-    localStorage.setItem(LS_META_KEY, JSON.stringify({ updatedAt: new Date().toISOString(), version: 'v2.7' }));
+    localStorage.setItem(LS_META_KEY, JSON.stringify({ updatedAt: new Date().toISOString(), version: 'v2.8' }));
     if (guideCount > 0) {
       localStorage.setItem(LS_GUIDE_KEY, JSON.stringify(guideRawData));
     }
@@ -1033,7 +1033,7 @@ function saveAll() {
   }
 }
 
-// v2.7 改造：不再作为首屏数据源，而是作为"用户导入数据恢复"层
+// v2.8 改造：不再作为首屏数据源，而是作为"用户导入数据恢复"层
 // 内置数据由 DOMContentLoaded 直接调用 loadSampleData() 保证首屏有内容
 function restoreFromLocalStorage() {
   const DEFAULT_REGION = '张瑛';
@@ -1041,7 +1041,7 @@ function restoreFromLocalStorage() {
     const meta = localStorage.getItem(LS_META_KEY);
     if (meta) {
       const m = JSON.parse(meta);
-      if (!m.version || m.version !== 'v2.7') {
+      if (!m.version || m.version !== 'v2.8') {
         // 版本不匹配则清除旧数据，继续使用内置数据
         localStorage.removeItem(LS_KEY);
         localStorage.removeItem(LS_GUIDE_KEY);
@@ -1081,50 +1081,50 @@ function clearData() {
 // ============================================================
 function loadSampleData() {
   storeData = [
-  { store_no:'95SHAS0301', store_name:'MOP精选店', store_type:'奥莱', region:'邱丽', target:0, achieved:513, actual_receipt:513, after_sales:0 },
-  { store_no:'95SHAS2541', store_name:'MOP杭州城北万象城MALL', store_type:'正价', region:'邱丽', target:1500, achieved:5368, actual_receipt:7550, after_sales:2182 },
-  { store_no:'95SHAS0761', store_name:'Marc O\'Polo  精选店', store_type:'正价', region:'张瑛', target:20000, achieved:61943.87, actual_receipt:95068, after_sales:33124.13 },
-  { store_no:'95SHAS0092', store_name:'MOP上海徐汇汇金百货专柜', store_type:'正价', region:'邱丽', target:3900, achieved:9542, actual_receipt:12945, after_sales:3403 },
-  { store_no:'95SHAS2631', store_name:'MOP武汉壹方天地MALL', store_type:'正价', region:'武瑾', target:2700, achieved:5956, actual_receipt:9784, after_sales:3828 },
-  { store_no:'95SHAS2782', store_name:'MOP北京翠微百货店', store_type:'正价', region:'王丹', target:2000, achieved:4204, actual_receipt:5545.6, after_sales:1341.6 },
-  { store_no:'95SHAS0121', store_name:'MOP上海凯德LUONEMALL', store_type:'正价', region:'邱丽', target:8450, achieved:16786.5, actual_receipt:26374, after_sales:9587.5 },
-  { store_no:'95SHAS3071', store_name:'MOP武汉杉杉奥莱', store_type:'奥莱', region:'武瑾', target:2000, achieved:3802.1, actual_receipt:4459.1, after_sales:657 },
-  { store_no:'95SHAS2921', store_name:'MOP西安万象城MALL', store_type:'正价', region:'刘吉莹', target:6600, achieved:11535.1, actual_receipt:13333.6, after_sales:1798.5 },
   { store_no:'95SHAS2562', store_name:'MOP温州滨江万象城MALL', store_type:'正价', region:'季陈乐', target:5000, achieved:6789.59, actual_receipt:8171, after_sales:1381.41 },
-  { store_no:'95SHAS2981', store_name:'MOP西安GPARK广场', store_type:'正价', region:'刘吉莹', target:6800, achieved:8953, actual_receipt:12188, after_sales:3235 },
-  { store_no:'95SHAS0281', store_name:'MOP北京龙湖亦庄天街MALL', store_type:'正价', region:'王丹', target:5250, achieved:6789.2, actual_receipt:9582.2, after_sales:2793 },
-  { store_no:'95SHAS3011', store_name:'MOP北京湾里王府井WellTown奥莱', store_type:'奥莱', region:'王丹', target:4000, achieved:5094, actual_receipt:6209, after_sales:1115 },
   { store_no:'95SHAS0711', store_name:'MOP温州万象城MALL', store_type:'正价', region:'季陈乐', target:6800, achieved:8591, actual_receipt:9869, after_sales:1278 },
-  { store_no:'95SHAS2883', store_name:'MOP北京双安百货专柜', store_type:'正价', region:'王丹', target:3000, achieved:3646, actual_receipt:3646, after_sales:0 },
-  { store_no:'95SHAS2571', store_name:'MOP上海真如环宇城MALL', store_type:'正价', region:'邱丽', target:5250, achieved:6275, actual_receipt:12691, after_sales:6416 },
-  { store_no:'95SHAS2851', store_name:'MOP成都天府和悦广场MALL', store_type:'正价', region:'王雪', target:4000, achieved:4702.39, actual_receipt:7603, after_sales:2900.61 },
-  { store_no:'95SHAS2801', store_name:'MOP成都杉杉奥莱', store_type:'奥莱', region:'王雪', target:4000, achieved:4666.74, actual_receipt:6834, after_sales:2167.26 },
-  { store_no:'95SH1S0031', store_name:'MOP苏州比斯特购物村', store_type:'奥莱', region:'邱丽', target:3000, achieved:3426, actual_receipt:3426, after_sales:0 },
   { store_no:'95SHAS2991', store_name:'MOP深圳布吉万象汇MALL', store_type:'正价', region:'季陈乐', target:3000, achieved:3270, actual_receipt:3716, after_sales:446 },
   { store_no:'95SHAS3061', store_name:'MOP深圳东莞益田假日奥莱', store_type:'奥莱', region:'季陈乐', target:3000, achieved:3128.6, actual_receipt:3462.6, after_sales:334 },
-  { store_no:'95SHAS0561', store_name:'MOP成都龙湖西宸天街MALL', store_type:'正价', region:'王雪', target:11000, achieved:11186, actual_receipt:21995.8, after_sales:10809.8 },
-  { store_no:'95SHAS2641', store_name:'MOP上海龙湖闵行天街MALL', store_type:'正价', region:'邱丽', target:2850, achieved:2728, actual_receipt:5871, after_sales:3143 },
-  { store_no:'95SHAS2551', store_name:'MOP北京王府井UPTOWN奥莱', store_type:'奥莱', region:'王丹', target:4000, achieved:3654, actual_receipt:3923, after_sales:269 },
-  { store_no:'95SHAS0261', store_name:'MOP北京龙湖丽泽天街MALL', store_type:'正价', region:'王丹', target:9300, achieved:7886.45, actual_receipt:26566.05, after_sales:18679.6 },
-  { store_no:'95SHAS0221', store_name:'MOP北京金源燕莎MALL', store_type:'正价', region:'王丹', target:11700, achieved:9857.85, actual_receipt:18324.7, after_sales:8466.85 },
-  { store_no:'95SH1S0041', store_name:'MOP杭州下沙奥莱', store_type:'奥莱', region:'邱丽', target:2000, achieved:1663, actual_receipt:5195, after_sales:3532 },
-  { store_no:'95SHAS0651', store_name:'MOP深圳龙岗万科MALL', store_type:'正价', region:'季陈乐', target:6500, achieved:5290, actual_receipt:5780, after_sales:490 },
-  { store_no:'95SHAS0231', store_name:'MOP北京凤凰汇MALL', store_type:'正价', region:'王丹', target:7650, achieved:6001.5, actual_receipt:10367, after_sales:4365.5 },
+  { store_no:'95SHAS0651', store_name:'MOP深圳龙岗万科MALL', store_type:'正价', region:'季陈乐', target:6500, achieved:5477, actual_receipt:5967, after_sales:490 },
   { store_no:'95SHAS3001', store_name:'MOP深圳中航城君尚购物中心MALL', store_type:'正价', region:'季陈乐', target:4000, achieved:3118, actual_receipt:3897, after_sales:779 },
+  { store_no:'95SHAS2861', store_name:'MOP深圳坂田万科MALL', store_type:'奥莱', region:'季陈乐', target:1800, achieved:79, actual_receipt:79, after_sales:0 },
+  { store_no:'95SHAS2921', store_name:'MOP西安万象城MALL', store_type:'正价', region:'刘吉莹', target:6600, achieved:11535.1, actual_receipt:13333.6, after_sales:1798.5 },
+  { store_no:'95SHAS2981', store_name:'MOP西安GPARK广场', store_type:'正价', region:'刘吉莹', target:6800, achieved:9508, actual_receipt:12743, after_sales:3235 },
+  { store_no:'95SHAS0521', store_name:'MOP西安王府井赛特临潼奥莱', store_type:'奥莱', region:'刘吉莹', target:6800, achieved:1952.66, actual_receipt:4074, after_sales:2121.34 },
+  { store_no:'95SHAS0301', store_name:'MOP精选店', store_type:'奥莱', region:'邱丽', target:0, achieved:513, actual_receipt:513, after_sales:0 },
+  { store_no:'95SHAS2541', store_name:'MOP杭州城北万象城MALL', store_type:'正价', region:'邱丽', target:1500, achieved:5958, actual_receipt:8140, after_sales:2182 },
+  { store_no:'95SHAS0092', store_name:'MOP上海徐汇汇金百货专柜', store_type:'正价', region:'邱丽', target:3900, achieved:9645, actual_receipt:13048, after_sales:3403 },
+  { store_no:'95SHAS0121', store_name:'MOP上海凯德LUONEMALL', store_type:'正价', region:'邱丽', target:8450, achieved:16202.5, actual_receipt:26374, after_sales:10171.5 },
+  { store_no:'95SHAS2571', store_name:'MOP上海真如环宇城MALL', store_type:'正价', region:'邱丽', target:5250, achieved:6574, actual_receipt:12990, after_sales:6416 },
+  { store_no:'95SH1S0031', store_name:'MOP苏州比斯特购物村', store_type:'奥莱', region:'邱丽', target:3000, achieved:3426, actual_receipt:3426, after_sales:0 },
+  { store_no:'95SHAS2641', store_name:'MOP上海龙湖闵行天街MALL', store_type:'正价', region:'邱丽', target:2850, achieved:2728, actual_receipt:5871, after_sales:3143 },
+  { store_no:'95SH1S0041', store_name:'MOP杭州下沙奥莱', store_type:'奥莱', region:'邱丽', target:2000, achieved:1663, actual_receipt:5311, after_sales:3648 },
   { store_no:'95SHAS0202', store_name:'MOP上海大宁久光MALL', store_type:'正价', region:'邱丽', target:4275, achieved:3125, actual_receipt:3375, after_sales:250 },
-  { store_no:'95SHAS0271', store_name:'MOP北京龙湖长楹天街MALL', store_type:'正价', region:'王丹', target:11250, achieved:7098.5, actual_receipt:9157.5, after_sales:2059 },
-  { store_no:'95SHAS3041', store_name:'MOP武汉武商梦时代MALL', store_type:'正价', region:'武瑾', target:2400, achieved:1411.5, actual_receipt:3167, after_sales:1755.5 },
+  { store_no:'95SHAS2782', store_name:'MOP北京翠微百货店', store_type:'正价', region:'王丹', target:2000, achieved:4204, actual_receipt:5545.6, after_sales:1341.6 },
+  { store_no:'95SHAS0281', store_name:'MOP北京龙湖亦庄天街MALL', store_type:'正价', region:'王丹', target:5250, achieved:6789.2, actual_receipt:9582.2, after_sales:2793 },
+  { store_no:'95SHAS3011', store_name:'MOP北京湾里王府井WellTown奥莱', store_type:'奥莱', region:'王丹', target:4000, achieved:5094, actual_receipt:6209, after_sales:1115 },
+  { store_no:'95SHAS2883', store_name:'MOP北京双安百货专柜', store_type:'正价', region:'王丹', target:3000, achieved:3646, actual_receipt:3646, after_sales:0 },
+  { store_no:'95SHAS2551', store_name:'MOP北京王府井UPTOWN奥莱', store_type:'奥莱', region:'王丹', target:4000, achieved:3654, actual_receipt:3923, after_sales:269 },
+  { store_no:'95SHAS0261', store_name:'MOP北京龙湖丽泽天街MALL', store_type:'正价', region:'王丹', target:9300, achieved:8426.45, actual_receipt:27106.05, after_sales:18679.6 },
+  { store_no:'95SHAS0221', store_name:'MOP北京金源燕莎MALL', store_type:'正价', region:'王丹', target:11700, achieved:9857.85, actual_receipt:18324.7, after_sales:8466.85 },
+  { store_no:'95SHAS0231', store_name:'MOP北京凤凰汇MALL', store_type:'正价', region:'王丹', target:7650, achieved:6001.5, actual_receipt:10367, after_sales:4365.5 },
+  { store_no:'95SHAS0271', store_name:'MOP北京龙湖长楹天街MALL', store_type:'正价', region:'王丹', target:11250, achieved:10124.9, actual_receipt:12183.9, after_sales:2059 },
   { store_no:'95SHAS0211', store_name:'MOP北京东方广场MALL', store_type:'正价', region:'王丹', target:9700, achieved:4638.64, actual_receipt:15893, after_sales:11254.36 },
+  { store_no:'95SHAS2771', store_name:'MOP北京首开万象汇MALL', store_type:'正价', region:'王丹', target:3000, achieved:121.02, actual_receipt:1758, after_sales:1636.98 },
+  { store_no:'95SHAS2851', store_name:'MOP成都天府和悦广场MALL', store_type:'正价', region:'王雪', target:4000, achieved:4517, actual_receipt:7603, after_sales:3086 },
+  { store_no:'95SHAS2801', store_name:'MOP成都杉杉奥莱', store_type:'奥莱', region:'王雪', target:4000, achieved:4666.74, actual_receipt:6834, after_sales:2167.26 },
+  { store_no:'95SHAS0561', store_name:'MOP成都龙湖西宸天街MALL', store_type:'正价', region:'王雪', target:11000, achieved:10894, actual_receipt:21995.8, after_sales:11101.8 },
   { store_no:'95SHAS0601', store_name:'MOP成都大魔方MALL', store_type:'正价', region:'王雪', target:4200, achieved:1894, actual_receipt:5739.5, after_sales:3845.5 },
   { store_no:'95SHAS0551', store_name:'MOP成都悠方MALL', store_type:'正价', region:'王雪', target:8100, achieved:3080, actual_receipt:6826, after_sales:3746 },
-  { store_no:'95SHAS0521', store_name:'MOP西安王府井赛特临潼奥莱', store_type:'奥莱', region:'刘吉莹', target:6800, achieved:1952.66, actual_receipt:4074, after_sales:2121.34 },
   { store_no:'95SHAS3081', store_name:'MOP成都合生汇MALL', store_type:'正价', region:'王雪', target:2600, achieved:624, actual_receipt:1162, after_sales:538 },
   { store_no:'95SHAS2871', store_name:'MOP成都七一国际广场MALL', store_type:'正价', region:'王雪', target:5000, achieved:1157, actual_receipt:1555, after_sales:398 },
-  { store_no:'95SHAS3101', store_name:'MOP武汉首创奥莱', store_type:'奥莱', region:'武瑾', target:2000, achieved:379, actual_receipt:1439, after_sales:1060 },
   { store_no:'95SHAS0541', store_name:'MOP成都太古里MALL', store_type:'正价', region:'王雪', target:11250, achieved:726, actual_receipt:6972, after_sales:6246 },
-  { store_no:'95SHAS2861', store_name:'MOP深圳坂田万科MALL', store_type:'奥莱', region:'季陈乐', target:1800, achieved:79, actual_receipt:79, after_sales:0 },
-  { store_no:'95SHAS2771', store_name:'MOP北京首开万象汇MALL', store_type:'正价', region:'王丹', target:3000, achieved:121.02, actual_receipt:1758, after_sales:1636.98 },
-  { store_no:'95SHAS0571', store_name:'MOP成都金牛凯德MALL', store_type:'正价', region:'王雪', target:7650, achieved:-2211, actual_receipt:4104, after_sales:6315 },
+  { store_no:'95SHAS0571', store_name:'MOP成都金牛凯德MALL', store_type:'正价', region:'王雪', target:7650, achieved:-1657, actual_receipt:4658, after_sales:6315 },
+  { store_no:'95SHAS2631', store_name:'MOP武汉壹方天地MALL', store_type:'正价', region:'武瑾', target:2700, achieved:5956, actual_receipt:9784, after_sales:3828 },
+  { store_no:'95SHAS3071', store_name:'MOP武汉杉杉奥莱', store_type:'奥莱', region:'武瑾', target:2000, achieved:3802.1, actual_receipt:4459.1, after_sales:657 },
+  { store_no:'95SHAS3041', store_name:'MOP武汉武商梦时代MALL', store_type:'正价', region:'武瑾', target:2400, achieved:2043.5, actual_receipt:3799, after_sales:1755.5 },
+  { store_no:'95SHAS3101', store_name:'MOP武汉首创奥莱', store_type:'奥莱', region:'武瑾', target:2000, achieved:379, actual_receipt:1439, after_sales:1060 },
+  { store_no:'95SHAS0761', store_name:'Marc O\'Polo  精选店', store_type:'正价', region:'张瑛', target:20000, achieved:61943.87, actual_receipt:95068, after_sales:33124.13 },
   { store_no:'95SHAS2721', store_name:'MOP沈阳尚柏奥莱', store_type:null, region:null, target:null, achieved:0, actual_receipt:0, after_sales:0 },
   { store_no:'95SHAS0751', store_name:'MOP天猫电子商务仓', store_type:null, region:null, target:null, achieved:0, actual_receipt:1246, after_sales:1246 },
   { store_no:'95SHAS0099', store_name:'MOP上海员工内买仓', store_type:null, region:null, target:null, achieved:-282, actual_receipt:0, after_sales:282 },
@@ -1132,7 +1132,7 @@ function loadSampleData() {
 ];
   saveToStorage();
   refreshAll();
-  showToast('✅ 截至6.28门店数据已载入（48家门店）');
+  showToast('✅ 截至6.29门店数据已载入（48家门店）');
 }
 
 // ============================================================
@@ -2114,7 +2114,7 @@ function clearGuideData() {
 }
 
 // ============================================================
-//  预置6.9导购数据（截至6.28导购实收金额汇总）
+//  预置6.9导购数据（截至6.29导购实收金额汇总）
 // ============================================================
 function loadPresetGuideData() {
   guideRawData = [
@@ -2125,10 +2125,10 @@ function loadPresetGuideData() {
   { storeCode:'95SH1S0041', guideName:'李菊', amount:0 },
   { storeCode:'95SH1S0041', guideName:'李艳梨', amount:230 },
   { storeCode:'95SHAS0092', guideName:'汇金百货-张梅', amount:4793 },
-  { storeCode:'95SHAS0092', guideName:'上海汇金-倪海艳', amount:4749 },
+  { storeCode:'95SHAS0092', guideName:'上海汇金-倪海艳', amount:4852 },
   { storeCode:'95SHAS0121', guideName:'廖雪英', amount:1792 },
   { storeCode:'95SHAS0121', guideName:'上海LUONE-刘必英', amount:3199 },
-  { storeCode:'95SHAS0121', guideName:'上海LUONE-屈海艳', amount:6879.5 },
+  { storeCode:'95SHAS0121', guideName:'上海LUONE-屈海艳', amount:6295.5 },
   { storeCode:'95SHAS0121', guideName:'上海LUONE-吴艳平', amount:3363 },
   { storeCode:'95SHAS0202', guideName:'上海大宁久光-陆庭', amount:592 },
   { storeCode:'95SHAS0202', guideName:'上海大宁久光-王青', amount:2533 },
@@ -2152,7 +2152,7 @@ function loadPresetGuideData() {
   { storeCode:'95SHAS0271', guideName:'宋静', amount:373 },
   { storeCode:'95SHAS0271', guideName:'张影', amount:1963 },
   { storeCode:'95SHAS0271', guideName:'长楹天街店-李静', amount:1041 },
-  { storeCode:'95SHAS0271', guideName:'长楹天街店-张洪', amount:2627.5 },
+  { storeCode:'95SHAS0271', guideName:'长楹天街店-张洪', amount:5653.9 },
   { storeCode:'95SHAS0281', guideName:'北京亦庄天街-胡紫君', amount:419 },
   { storeCode:'95SHAS0281', guideName:'北京亦庄天街-李见', amount:1668 },
   { storeCode:'95SHAS0281', guideName:'北京亦庄天街-王佳宇', amount:3727.2 },
@@ -2167,13 +2167,13 @@ function loadPresetGuideData() {
   { storeCode:'95SHAS0551', guideName:'成都悠方-肖敏', amount:1493 },
   { storeCode:'95SHAS0551', guideName:'成都悠方-徐红霞', amount:83 },
   { storeCode:'95SHAS0551', guideName:'成都悠方-周菊', amount:137 },
-  { storeCode:'95SHAS0561', guideName:'成都西宸-聂芊', amount:4504 },
+  { storeCode:'95SHAS0561', guideName:'成都西宸-聂芊', amount:4212 },
   { storeCode:'95SHAS0561', guideName:'成都西宸-谭佳', amount:-135 },
   { storeCode:'95SHAS0561', guideName:'成都西宸-向利秋', amount:2367 },
   { storeCode:'95SHAS0561', guideName:'成都西宸-周述艳', amount:3788 },
   { storeCode:'95SHAS0561', guideName:'张梦', amount:662 },
   { storeCode:'95SHAS0571', guideName:'金牛凯德-李晓艳', amount:687 },
-  { storeCode:'95SHAS0571', guideName:'金牛凯德-涂三黎', amount:-4070 },
+  { storeCode:'95SHAS0571', guideName:'金牛凯德-涂三黎', amount:-3516 },
   { storeCode:'95SHAS0571', guideName:'金牛凯德-徐川', amount:882 },
   { storeCode:'95SHAS0571', guideName:'金牛凯德-徐水月', amount:290 },
   { storeCode:'95SHAS0601', guideName:'大魔方-刘元英', amount:4466 },
@@ -2193,7 +2193,7 @@ function loadPresetGuideData() {
   { storeCode:'95SHAS2562', guideName:'温州滨江-谢百美', amount:5126 },
   { storeCode:'95SHAS2571', guideName:'上海真如环宇-顾钰桦', amount:2087 },
   { storeCode:'95SHAS2571', guideName:'上海真如环宇-汪翠时', amount:416 },
-  { storeCode:'95SHAS2571', guideName:'上海真如环宇-朱琳', amount:3772 },
+  { storeCode:'95SHAS2571', guideName:'上海真如环宇-朱琳', amount:4071 },
   { storeCode:'95SHAS2631', guideName:'武汉天地-罗保荣', amount:2549 },
   { storeCode:'95SHAS2631', guideName:'武汉天地-余幸子', amount:2596 },
   { storeCode:'95SHAS2631', guideName:'武汉壹方天地-唐玉婷', amount:811 },
@@ -2217,7 +2217,7 @@ function loadPresetGuideData() {
   { storeCode:'95SHAS2921', guideName:'西安万象城-刘拧', amount:2943.1 },
   { storeCode:'95SHAS2921', guideName:'西安万象城-吕从爱', amount:3376 },
   { storeCode:'95SHAS2981', guideName:'西安G PARK-李晓利', amount:2455 },
-  { storeCode:'95SHAS2981', guideName:'西安G PARK-石露芹', amount:3766 },
+  { storeCode:'95SHAS2981', guideName:'西安G PARK-石露芹', amount:4321 },
   { storeCode:'95SHAS2981', guideName:'西安G PARK-武艳红', amount:2732 },
   { storeCode:'95SHAS2991', guideName:'布吉万象汇-陈美青', amount:779 },
   { storeCode:'95SHAS2991', guideName:'布吉万象汇-万倩', amount:779 },
@@ -2231,6 +2231,7 @@ function loadPresetGuideData() {
   { storeCode:'95SHAS3011', guideName:'张新兰', amount:173 },
   { storeCode:'95SHAS3011', guideName:'赵书霞', amount:1936 },
   { storeCode:'95SHAS3041', guideName:'李然然', amount:1411.5 },
+  { storeCode:'95SHAS3041', guideName:'秦璐璐', amount:632 },
   { storeCode:'95SHAS3061', guideName:'陈美容', amount:1645 },
   { storeCode:'95SHAS3061', guideName:'深圳益田-黄素霞', amount:1483.6 },
   { storeCode:'95SHAS3071', guideName:'殷青青', amount:635 },
